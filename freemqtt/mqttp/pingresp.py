@@ -6,16 +6,17 @@
 import io
 import logging
 from .packet import Packet
-from . import pktype, protocol, utils
+from . import protocol, utils
+from .pktype import PacketType
 
 class Pingresp(Packet):
     def __init__(self, ver:int=protocol.MQTT311) -> None:
-        super(Pingresp, self).__init__(ver, pktype.PINGRESP)
+        super(Pingresp, self).__init__(ver, PacketType.PINGRESP)
 
     # unpack
     def unpack(self, r: io.BytesIO) -> bool:
         if self.flags() != 0x00:
-            logging.error("Error pingreq flags: %02X" % self.flags())
+            logging.error(f"Error pingreq flags: {self.flags():02X}")
             return False
         data = utils.read_rest_data(r)
         if data:

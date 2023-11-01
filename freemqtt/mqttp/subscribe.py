@@ -6,15 +6,15 @@
 import io
 import logging
 from typing import List
-from pydoc_data.topics import topics
 from .packet import Packet
-from . import mask, pktype, protocol, utils
-from .property import PropertSet
-
+from .pktype import PacketType
+from .property import PropertSet, Property
+from . import protocol, utils, mask
 class TopicOptPair(object):
-    def __init__(self, topic_filter: str, options:int=0) -> None:
+    def __init__(self, topic_filter: str, options:int=0, sub_id: int=None) -> None:
         self.topic_filter = topic_filter
         self.options = options
+        self.sub_id = sub_id # Subscription Identifier
 
     def QoS(self) -> int:
         return self.options & mask.SubscriptionQoS
@@ -30,7 +30,6 @@ class TopicOptPair(object):
 
     def setQoS(self, qos: int) -> None:
         self.options =  (self.options & ~mask.SubscriptionQoS) | qos
-
         
     def setNL(self, nl:bool) -> None:
         self.options = (self.options & ~mask.SubscriptionNL) | (nl << 2)
@@ -41,10 +40,13 @@ class TopicOptPair(object):
     def setRH(self, rh: int) -> None:
         self.options = (self.options & ~mask.SubscriptionRetainHandling) | (rh <<4)
 
+    def subscription_id(self) -> int:
+        return self.sub_id
+
 class Subscribe(Packet):
     def __init__(self, ver:int=protocol.MQTT311) -> None:
-        super(Subscribe, self).__init__(ver, pktype.SUBSCRIBE)
-        self.propset = PropertSet(pktype.SUBSCRIBE)
+        super(Subscribe, self).__init__(ver, PacketType.SUBSCRIBE)
+        self.propset = PropertSet(PacketType.SUBSCRIBE)
         self.topicOpsList: List[TopicOptPair] = []
 
     def valid_SubOpts(self, ops: int) -> bool:
@@ -60,10 +62,13 @@ class Subscribe(Packet):
             return False
         return True
 
+    def subscription_id(self) -> int:
+        return self.propset.get(Property.Subscription_Identifier)
+
     # unpack packet
     def unpack(self, r: io.BytesIO) -> bool:
         if self.flags() != 0x02:
-            logging.error("Error subscribe flags: %02X" % self.flags())
+            logging.error(f"Error subscribe flags: {self.flags():02X}")
             return False
         # packet id
         pid = utils.read_int16(r)
@@ -74,8 +79,12 @@ class Subscribe(Packet):
         # properties
         if self.version == protocol.MQTT50 :
             if not self.propset.unpack(r):
-                logging.error("Error parsing properties.")
+                logging.error("Error parsing properties")
                 return False
+
+        # get subscription id (a int number or None)
+        subid = self.subscription_id()
+
         # topic filter and options pair
         while True:
             topic_filter = utils.read_string(r)
@@ -86,13 +95,13 @@ class Subscribe(Packet):
                 logging.error("Error subscribe options: None")
                 return False
             if self.valid_SubOpts(options):
-                self.topicOpsList.append(TopicOptPair(topic_filter, options))
+                self.topicOpsList.append(TopicOptPair(topic_filter, options, subid))
             else:
-                logging.error("Invalid subscribe options: %02X" % options)
+                logging.error(f"Invalid subscribe options: {options:02X}")
                 return False
         # valid payload
         if len(self.topicOpsList) == 0:
-            logging.error("No Topic Filter and Subscription Options pair in payload.")
+            logging.error("No Topic Filter and Subscription Options pair in payload")
             return False
         return True
 
@@ -100,7 +109,7 @@ class Subscribe(Packet):
     def pack(self) -> bytes:
         w = io.BytesIO()
         # packet id
-        utils.write_int16(self.pid())
+        utils.write_int16(w, self.pid())
     	# property
         if self.version == protocol.MQTT50:
             ppdata = self.propset.pack()

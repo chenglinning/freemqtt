@@ -6,26 +6,27 @@
 import io
 import logging
 from .packet import Packet
-from . import pktype, protocol, utils
+from .pktype import PacketType
 from .property import PropertSet
-from . import reason_code as ReasonCode
+from .reason_code import Reason, validReasoneCode
+from . import protocol, utils
 
 class Puback(Packet):
     def __init__(self, ver:int=protocol.MQTT311) -> None:
-        super(Puback, self).__init__(ver, pktype.PUBACK)
-        self.rcode = 0
-        self.propset = PropertSet(pktype.PUBACK)
+        super(Puback, self).__init__(ver, PacketType.PUBACK)
+        self.rcode = Reason.Success
+        self.propset = PropertSet(PacketType.PUBACK)
 
-    def reason_code(self) -> int:
+    def reason_code(self) -> Reason:
         return self.rcode
     
-    def set_reason_code(self, code: int) -> None:
-        self.reason_code = code
+    def set_reason_code(self, rc: Reason) -> None:
+        self.rcode = rc
 
     # unpack puback packet
     def unpack(self, r: io.BytesIO) -> bool:
         if self.flags() != 0x00:
-            logging.error("Error puback flags: %02X" % self.flags())
+            logging.error(f"Error puback flags: {self.flags():02X}")
             return False
 
         pid = utils.read_int16(r)
@@ -40,14 +41,14 @@ class Puback(Packet):
             if rcode is None:
                 logging.error("Error puback packet reason code: None")
                 return False
-            if ReasonCode.valid4pktype(rcode, self.type):
+            if validReasoneCode(rcode, self.pktype):
                 self.set_reason_code(rcode)
             else:
-                logging.error("Invalid puback packet reason code: %02X" % rcode)
+                logging.error(f"Invalid puback packet reason code: {rcode:02X}")
                 return False
             # properties
             if not self.propset.unpack(r):
-                logging.error("Error parsing properties.")
+                logging.error("Error parsing properties")
                 return False
         return True
 
@@ -55,11 +56,11 @@ class Puback(Packet):
     def pack(self) -> bytes:
         w = io.BytesIO()
         # packet id
-        utils.write_int16(self.pid())
+        utils.write_int16(w, self.pid())
 
         if self.version == protocol.MQTT50 :
             # reason code
-            utils.write_int8(self.reason_code())
+            utils.write_int8(w, self.reason_code())
             # properties
             ppdata = self.propset.pack()
             plen = len(ppdata)

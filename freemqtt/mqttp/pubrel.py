@@ -6,17 +6,18 @@
 import io
 import logging
 from .packet import Packet
-from . import mask, pktype, protocol, utils
+from .reason_code import Reason, validReasoneCode
+from .pktype import PacketType
 from .property import PropertSet
-from . import reason_code as ReasonCode
+from . import protocol, utils
 
 class Pubrel(Packet):
     def __init__(self, ver:int=protocol.MQTT311) -> None:
-        super(Pubrel, self).__init__(ver, pktype.PUBREL)
-        self.rcode = 0
-        self.propset = PropertSet(pktype.PUBREL)
+        super(Pubrel, self).__init__(ver, PacketType.PUBREL)
+        self.rcode = Reason.Success
+        self.propset = PropertSet(PacketType.PUBREL)
 
-    def reason_code(self) -> int:
+    def reason_code(self) -> Reason:
         return self.rcode
     
     def set_reason_code(self, code: int) -> None:
@@ -25,7 +26,7 @@ class Pubrel(Packet):
     # unpack pubrel packet
     def unpack(self, r: io.BytesIO) -> int:
         if self.flags() != 0x00:
-            logging.error("Error pubrel flags: %02X" % self.flags())
+            logging.error(f"Error pubrel flags: {self.flags():02X}")
             return False
 
         pid = utils.read_int16(r)
@@ -40,15 +41,14 @@ class Pubrel(Packet):
             if rcode is None:
                 logging.error("Error pubrel packet reason code: None")
                 return False
-            if ReasonCode.valid4pktype(rcode, self.type):
+            if validReasoneCode(rcode, self.pktype):
                 self.set_reason_code(rcode)
             else:
-                logging.error("Invalid pubrel packet reason code: %02X" % rcode)
+                logging.error(f"Invalid pubrel packet reason code: {rcode:02X}")
                 return False
-
             # properties
             if not self.propset.unpack(r):
-                logging.error("Error parsing properties.")
+                logging.error("Error parsing properties")
                 return False
         return True
 
@@ -56,17 +56,15 @@ class Pubrel(Packet):
     def pack(self) -> bytes:
         w = io.BytesIO()
         # packet id
-        utils.write_int16(self.pid())
-
+        utils.write_int16(w, self.pid())
         if self.version == protocol.MQTT50 :
             # reason code
-            utils.write_int8(self.reason_code())
+            utils.write_int8(w, self.reason_code())
             # properties
             ppdata = self.propset.pack()
             plen = len(ppdata)
             utils.write_uvarint(w, plen)
             utils.write_bytes(w, ppdata)
-           
         data = w.getvalue()
         w.close()
         return data

@@ -5,13 +5,17 @@
 #
 import io
 import logging
+import uuid
 from .packet import Packet
-from . import mask, pktype, protocol, utils
-from .property import PropertSet
+from . import mask, protocol, utils
+from .pktype import PacketType, QoS
+from .property import PropertSet, Property, StringPair
+from .reason_code import Reason, validReasoneCode
+
 
 class Connect(Packet):
     def __init__(self, ver:int=protocol.MQTT311) -> None:
-        super(Connect, self).__init__(ver, pktype.CONNECT)
+        super(Connect, self).__init__(ver, PacketType.CONNECT)
         self.clientid = None
         self.username = None
         self.password = None
@@ -21,12 +25,18 @@ class Connect(Packet):
         self.password_flag = True
 
         self.will =  False
-        self.will_qos = 0
+        self.will_qos = QoS.qos0
         self.will_retain = False
         self.will_topic = None
         self.will_message = None
-        self.propset = PropertSet(pktype.CONNECT)
-        self.willpropset = PropertSet(pktype.WILLPP)
+        self.propset = PropertSet(PacketType.CONNECT)
+        self.willpropset = PropertSet(PacketType.WILLPP)
+        self.assigned_id = False
+        self.appid = None # application ID, the space is isolated per application of IoT platform
+
+    def receive_maximum(self) -> int:
+        rm = self.propset.get(Property.Receive_Maximum)
+        return  1024 if rm==None else rm
 
     def set_username(self, name: str) -> None:
         self.username = name
@@ -60,19 +70,22 @@ class Connect(Packet):
     def conn_flags(self) -> int:
         return self.username_flag << 7 | self.password_flag << 6 | self.will_retain << 5 | self.will_qos << 3 | self.will << 2 | self.clean_start << 1
 
-    # unpack conncet packet from server side
+    def request_response_information(self) -> bool:
+        return self.propset.get(Property.Request_Response_Information) == 1
+        
+    # unpack conncet packet on server side
     def unpack(self, r: io.BytesIO) -> bool:
         proto_name = utils.read_string(r)
         if proto_name != "MQTT":
-            logging.error("Error protocol name: %s" % proto_name)
+            logging.error(f"Error protocol name: {proto_name}")
             return False
 
         proto_ver = utils.read_int8(r)
         if proto_ver != protocol.MQTT311 and proto_ver != protocol.MQTT50:
-            logging.error("Error protocol version: %d" % proto_ver)
+            logging.error(f"Error protocol version: {proto_ver}")
             return False
-
         self.set_version(proto_ver)
+       
         connect_flags = utils.read_int8(r)
         if connect_flags is None:
             logging.error("Error connect flags: None")
@@ -80,7 +93,7 @@ class Connect(Packet):
 
         # for MQTT V3.1.1 5.0, the bit0 must be 0
         if connect_flags & mask.ConnFlagReserved:
-            logging.error("Error connect flags: %02X" % connect_flags)
+            logging.error(f"Error connect flags: {connect_flags:02X}")
             return False
              
         self.clean_start = (connect_flags & mask.ConnFlagClean) > 0
@@ -91,73 +104,78 @@ class Connect(Packet):
         self.password_flag = (connect_flags & mask.ConnFlagPassword) > 0
         
         if not self.will and self.will_qos > 0 or self.will_qos > 2:
-            logging.error("Invalid will QoS: %d" % self.will_qos)
+            logging.error(f"Invalid will QoS: {self.will_qos}")
             return False
 
-        self.keep_alive = utils.read_int16(2)
+        self.keep_alive = utils.read_int16(r)
         if self.keep_alive is None:
             logging.error("Error keep alive interval: None")
             return False
 
         if proto_ver == protocol.MQTT311:
             if (connect_flags & mask.ConnFlagUsername)==0 and (connect_flags & mask.ConnFlagPassword) > 0:
-                logging.error("Error connect flags: %02X" % connect_flags)
+                logging.error(f"Error connect flags: {connect_flags:02X}")
                 return False
         else: # MQTT 5.0
             # connect properties
-            self.propset = PropertSet(pktype.CONNECT)
             if not self.propset.unpack(r):
-                logging.error("Error parsing properties.")
+                logging.error("Error parsing properties")
                 return False
 
     	# MQTT3.1.1 5.0  reading client id
-        self.clientid = utils.read_string(r)
-        if not self.clientid:
-            # assing an unique ID by Server
-            pass
-
+        readok, self.clientid = utils.read_string(r)
+        if readok:
+            if self.clientid is None:
+                self.clientid = uuid.uuid1().hex[0:8]
+        else:
+            return False
+        
         # Parsing will data
         if self.will:
             # will properties
             if proto_ver==protocol.MQTT50 :
                 if not self.willpropset.upack(r):
-                    logging.error("Error parsing will properties.")
+                    logging.error("Error parsing will properties")
                     return False
-
             # will topic
-            will_topic = utils.read_string(r)
-            if not will_topic:
-                logging.error("Error parsing will topic.")
+            readok, will_topic = utils.read_string(r)
+            if not (readok and will_topic):
+                logging.error("Error parsing will topic")
                 return False
                 
             if not utils.TopicPublishRegexp.match(will_topic):
-                logging.error("Invalid will topic:%s" % will_topic)
+                logging.error(f"Invalid will topic: {will_topic}")
                 return False
-
             self.will_topic = will_topic
 
             # will paload
             payload = utils.read_binary_data(r)
             if not payload:
-                logging.error("Invalid payload: %s" % payload)
+                logging.error(f"Invalid payload: {payload}")
                 return False
             self.will_message = payload
 
         if self.username_flag:
-            self.username = utils.read_string(r)
-            if not self.username:
-                logging.error("Error user name: None")
+            readok, self.username = utils.read_string(r)
+            if readok:
+                if not self.username:
+                    logging.error("Error user name: None")
+                    return False
+            else:
                 return False
 
         if self.password_flag:
-            self.password = utils.read_string(r)
-            if not self.password:
-                logging.error("Error user password: None")
+            readok, self.password = utils.read_string(r)
+            if readok:
+                if not self.password:
+                    logging.error("Error user password: None")
+                    return False
+            else:
                 return False
                 
         return True
 
-    # pack connect packet from client side
+    # pack connect packet on client side
     def pack(self) -> bytes:
         w = io.BytesIO()
         utils.write_string(w, protocol.NAME)

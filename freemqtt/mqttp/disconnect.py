@@ -7,41 +7,52 @@ import io
 import logging
 from re import U
 from .packet import Packet
-from . import mask, pktype, protocol, utils
-from .property import PropertSet
-from . import reason_code as ReasonCode
+from . import protocol, utils
+
+from .pktype import PacketType
+from .property import PropertSet, Property, StringPair
+from .reason_code import Reason, validReasoneCode
 
 class Disconnect(Packet):
     def __init__(self, ver:int=protocol.MQTT311) -> None:
-        super(Disconnect, self).__init__(ver, pktype.DISCONNECT)
-        self.rcode = ReasonCode.Success
-        self.propset = PropertSet(pktype.DISCONNECT)
+        super(Disconnect, self).__init__(ver, PacketType.DISCONNECT)
+        self.rcode = Reason.Success
+        self.propset = PropertSet(PacketType.DISCONNECT)
 
-    def reason_code(self) -> int:
+    def reason_code(self) -> Reason:
         return self.rcode
 
-    def set_reason_code(self, code: int) -> None:
+    def set_reason_code(self, code: Reason) -> None:
         self.rcode = code
 
-    # unpanc
+    # set properties for disconnet
+    def set_session_expiry_interval(self, v) -> bool:
+        return self.propset.set(Property.Session_Expiry_Interval, v)
+    def set_reason_string(self, v: str) -> bool:
+        return self.propset.set(Property.Reason_String, v)
+    def set_user_property(self, k: str, v: str) -> bool:
+        sp = StringPair(k,v)
+        return self.propset.set(Property.User_Property, sp)
+
+    # unpack
     def unpack(self, r: io.BytesIO) -> bool:
         if self.flags() != 0x00:
-            logging.error("Error disconnect flags: %02X" % self.flags())
+            logging.error(f"Error disconnect flags: {self.flags():02X}")
             return False
         rcode = utils.read_int8(r)
         if rcode is None:
             logging.error("Error disconnect reason code: None")
             return False
-        if ReasonCode.valid4pktype(rcode, self.type()):
-            self.rcode = rcode
+        if validReasoneCode(rcode, self.pktype):
+            self.rcode = Reason(rcode)
         else:
-            logging.error("Error disconnnet reason code: %02X" % rcode)
+            logging.error(f"Error disconnnet reason code:{rcode:02X}")
             return False
         if self.version == protocol.MQTT50 :
             # properties
-            self.propset = PropertSet(pktype.CONNACK)
+            self.propset = PropertSet(PacketType.DISCONNECT)
             if not self.propset.unpack(r):
-                logging.error("Error parsing properties.")
+                logging.error("Error parsing properties")
                 return False
         return True
 

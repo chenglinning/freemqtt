@@ -5,28 +5,27 @@
 #
 import io
 import logging
-from xmlrpc.client import boolean
 from .packet import Packet
-from . import mask, pktype, protocol, utils
+from .pktype import PacketType
 from .property import PropertSet
-from . import reason_code as ReasonCode
-
+from .reason_code import Reason, validReasoneCode
+from . import protocol, utils
 class Pubcomp(Packet):
     def __init__(self, ver:int=protocol.MQTT311) -> None:
-        super(Pubcomp, self).__init__(ver, pktype.PUBCOMP)
-        self.rcode = 0
-        self.propset = PropertSet(pktype.PUBCOMP)
+        super(Pubcomp, self).__init__(ver, PacketType.PUBCOMP)
+        self.rcode = Reason.Success
+        self.propset = PropertSet(PacketType.PUBCOMP)
 
-    def reason_code(self) -> int:
+    def reason_code(self) -> Reason:
         return self.rcode
     
-    def set_reason_code(self, code: int) -> None:
-        self.reason_code = code
+    def set_reason_code(self, rc: Reason) -> None:
+        self.rcode = rc
 
     # unpack pubcomp packet
     def unpack(self, r: io.BytesIO) -> bool:
         if self.flags() != 0x00:
-            logging.error("Error pubcomp flags: %02X" % self.flags())
+            logging.error(f"Error pubcomp flags:{self.flags():02X}")
             return False
 
         pid = utils.read_int16(r)
@@ -41,15 +40,14 @@ class Pubcomp(Packet):
             if rcode is None:
                 logging.error("Error pubcomp packet reason code: None")
                 return False
-            if ReasonCode.valid4pktype(rcode, self.type):
-                self.set_reason_code(rcode)
+            if validReasoneCode(rcode, self.pktype):
+                self.set_reason_code(Reason(rcode))
             else:
-                logging.error("Invalid pubcomp packet reason code: %02X" % rcode)
+                logging.error(f"Invalid pubcomp packet reason code: {rcode:02X}")
                 return False
-
             # properties
             if not self.propset.unpack(r):
-                logging.error("Error parsing properties.")
+                logging.error("Error parsing properties")
                 return False
         return True
 
@@ -57,17 +55,15 @@ class Pubcomp(Packet):
     def pack(self) -> bytes:
         w = io.BytesIO()
         # packet id
-        utils.write_int16(self.pid())
-
+        utils.write_int16(w, self.pid())
         if self.version == protocol.MQTT50 :
             # reason code
-            utils.write_int8(self.reason_code())
+            utils.write_int8(w, self.reason_code())
             # properties
             ppdata = self.propset.pack()
             plen = len(ppdata)
             utils.write_uvarint(w, plen)
             utils.write_bytes(w, ppdata)
-           
         data = w.getvalue()
         w.close()
         return data

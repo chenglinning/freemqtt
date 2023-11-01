@@ -7,6 +7,7 @@ import io
 import logging
 import struct
 import re
+from typing import Tuple
 
 # TopicFilterRegexp regular expression that all subscriptions must be validated
 TopicFilterRegexp = re.compile(r'^(([^+#]*|\+)(/([^+#]*|\+))*(/#)?|#)$')
@@ -66,20 +67,23 @@ def write_int32(w: io.BytesIO, v: int) -> int:
     return w.write(struct.pack("!I", v))
  
 
-def read_string(r: io.BytesIO) -> str:
-    len = read_uint16(r)
+def read_string(r: io.BytesIO) -> Tuple[bool, str]:
+    len = read_int16(r)
+    success = True
     if not len:
-        return None
+        return (success, None)
     try:
         utf8str = r.read(len)
         v = utf8str.decode("utf8")
         if not BasicUTFRegexp.match(v):
             logging.error("Invalid UTF8 string.")
             v = None
+            success = False
     except Exception as e:
         logging.exception(repr(e))
+        success = False
         v = None
-    return v
+    return (success, v)
 
 def write_string(w: io.BytesIO, v: str) -> int:
     len = -1

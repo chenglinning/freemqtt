@@ -5,17 +5,18 @@
 
 import abc
 import io
-from . import mask, pktype, protocol
+from . import mask, protocol, utils
+from .pktype import PacketType, QoS
 
 class Packet(object):
     __metaclass__ = abc.ABCMeta
 
-    def __init__(self, ver: int=protocol.MQTT311, pktype:int=pktype.CONNECT) -> None:
+    def __init__(self, ver: int=protocol.MQTT311, pktype:PacketType=PacketType.CONNECT) -> None:
         self.version = ver
-        self.type = pktype
+        self.pktype = pktype
         self.pid = 0
         self.dup = False
-        self.qos = protocol.QoS0
+        self.qos = QoS.qos0
         self.retain = False
 
     # get payload of packet
@@ -23,8 +24,8 @@ class Packet(object):
         return bytearray()
     
     # get packet type
-    def get_type(self) -> int:
-        return self.type
+    def get_type(self) -> PacketType:
+        return self.pktype
     
     # get packet id
     def get_pid(self) -> int:
@@ -40,11 +41,11 @@ class Packet(object):
         
     #  return thether the packet is duplicate
     def get_dup(self) -> bool:
-        return self._dup
+        return self.dup
 
     # Returns the MQTT Packet MQTT name
     def get_name(self) -> str:
-        return pktype.PacketName(self.pktype)
+        return self.pktype.name
 
     # Returns the Packet MQTT version 
     def get_version(self) -> int:
@@ -55,11 +56,11 @@ class Packet(object):
         self.version = ver
 
     # Set the packet's QoS
-    def set_qos(self, qos: int) -> None:
+    def set_qos(self, qos: QoS) -> None:
         self.qos = qos
 
     # Return the packet's QoS
-    def get_qos(self) -> int:
+    def get_qos(self) -> QoS:
         return self.qos
 
     #  Set the packet's retain flag
@@ -70,8 +71,8 @@ class Packet(object):
     def get_retain(self) -> bool:
         return self.retain
 
-    # Parse the packet fixed header flags byte
-    def parse_flags(self, flags: int) -> None:
+    # set fixed header flags
+    def set_flags(self, flags: int) -> None:
         self.dup = flags & mask.Dup > 0
         self.qos = flags & mask.Qos >> 1
         self.retain = flags & mask.Retain > 0
@@ -90,3 +91,21 @@ class Packet(object):
     def pack(self) -> bytes:
         pass
     
+    # Get entire pack of packet
+    async def full_pack(self) -> bytes:
+        w = io.BytesIO()
+        fh = self.fixed_header()
+        rdata = self.pack()
+        rlen = len(rdata)
+
+        # Fixed header
+        utils.write_int8(w, fh)
+        # Remaining length
+        utils.write_uvarint(w, rlen)
+        # Remaining data
+        utils.write_bytes(w, rdata)
+
+        data = w.getvalue()
+        w.close()
+
+        return data
