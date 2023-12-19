@@ -10,12 +10,16 @@ from .packet import Packet
 from .pktype import PacketType
 from .property import PropertSet, Property
 from . import protocol, utils, mask
+from .reason_code import Reason
 class TopicOptPair(object):
     def __init__(self, topic_filter: str, options:int=0, sub_id: int=None) -> None:
         self.topic_filter = topic_filter
         self.options = options
         self.sub_id = sub_id # Subscription Identifier
-
+        self.valid = True
+        self.existing = False
+        self.shared = False
+        
     def QoS(self) -> int:
         return self.options & mask.SubscriptionQoS
 
@@ -72,7 +76,7 @@ class Subscribe(Packet):
             return False
         # packet id
         pid = utils.read_int16(r)
-        if pid is None:
+        if pid <= 0 :
             logging.error("Error subscribe packet id: None")
             return False
         self.set_pid(pid)
@@ -83,13 +87,20 @@ class Subscribe(Packet):
                 return False
 
         # get subscription id (a int number or None)
-        subid = self.subscription_id()
-
+        subid = 0
+        if self.version == protocol.MQTT50 :
+            subid = self.subscription_id()
+            if  subid is None:
+                pass
+            elif subid==0:
+                logging.error(f"Error subscription id:{subid}")
+                return False
         # topic filter and options pair
         while True:
             topic_filter = utils.read_string(r)
-            if topic_filter is None:
+            if not topic_filter:
                 break
+            logging.info(f"topfic filter: {topic_filter}")
             options = utils.read_int8(r)
             if options is None:
                 logging.error("Error subscribe options: None")
@@ -109,7 +120,7 @@ class Subscribe(Packet):
     def pack(self) -> bytes:
         w = io.BytesIO()
         # packet id
-        utils.write_int16(w, self.pid())
+        utils.write_int16(w, self.pid)
     	# property
         if self.version == protocol.MQTT50:
             ppdata = self.propset.pack()

@@ -55,7 +55,7 @@ class Pubcomp(Packet):
     def pack(self) -> bytes:
         w = io.BytesIO()
         # packet id
-        utils.write_int16(w, self.pid())
+        utils.write_int16(w, self.pid)
         if self.version == protocol.MQTT50 :
             # reason code
             utils.write_int8(w, self.reason_code())

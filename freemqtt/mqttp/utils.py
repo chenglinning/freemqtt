@@ -7,17 +7,13 @@ import io
 import logging
 import struct
 import re
-from typing import Tuple
 
 # TopicFilterRegexp regular expression that all subscriptions must be validated
 TopicFilterRegexp = re.compile(r'^(([^+#]*|\+)(/([^+#]*|\+))*(/#)?|#)$')
-
 # TopicPublishRegexp regular expression that all publish to topic must be validated
 TopicPublishRegexp = re.compile(r'^[^#+]*$')
-
 # SharedTopicRegexp regular expression that all share subscription must be validated
 SharedTopicRegexp = re.compile(r'^\$share/([^#+/]+)(/)(.+)$')
-
 # BasicUTFRegexp regular expression all MQTT strings must meet [MQTT-1.5.3]
 BasicUTFRegexp = re.compile(r'^[^\u0000-\u001F\u007F-\u009F]*$')
 
@@ -33,84 +29,86 @@ def vlen (u: int) ->int:
 	return 0
 
 def read_int8(r: io.BytesIO) -> int:
-    try:
-        v, = struct.unpack("!B", r.read(1))
-    except Exception as e:
-        v = None
-        logging.exception(repr(e))
-    finally:
-        return v
+    buff = r.read(1)
+    if buff:
+        v, = struct.unpack("!B", buff)
+    else:
+        v = -1
+    return v
 
 def write_int8(w: io.BytesIO, v: int) -> int:
     return w.write(struct.pack("!B", v))
 
 def read_int16(r: io.BytesIO) -> int:
-    try:
-        v, = struct.unpack("!H", r.read(2))
-    except Exception as e:
-        logging.exception(repr(e))
-        v = None       
+    buff = r.read(2)
+    if len(buff)==2:
+        v, = struct.unpack("!H", buff)
+    else:
+        v = -1
     return v
 
 def write_int16(w: io.BytesIO, v: int) -> int:
     return w.write(struct.pack("!H", v))
 
 def read_int32(r: io.BytesIO) -> int:
-    try:
-        v, = struct.unpack("!I", r.read(4))
-    except Exception as e:
-        logging.exception(repr(e))
-        v = None       
+    buff = r.read(4)
+    if len(buff)==4:
+        v, = struct.unpack("!I", buff)
+    else:
+        v = -1
     return v
 
 def write_int32(w: io.BytesIO, v: int) -> int:
     return w.write(struct.pack("!I", v))
  
 
-def read_string(r: io.BytesIO) -> Tuple[bool, str]:
-    len = read_int16(r)
-    success = True
-    if not len:
-        return (success, None)
+def read_string(r: io.BytesIO) -> str:
+    rlen = read_int16(r)
+    if rlen < 0:
+        return None
+    if rlen==0:
+        return ""
     try:
-        utf8str = r.read(len)
+        utf8str = r.read(rlen)
         v = utf8str.decode("utf8")
         if not BasicUTFRegexp.match(v):
             logging.error("Invalid UTF8 string.")
             v = None
-            success = False
     except Exception as e:
         logging.exception(repr(e))
-        success = False
         v = None
-    return (success, v)
+    return v
 
 def write_string(w: io.BytesIO, v: str) -> int:
-    len = -1
+    rlen = -1
     if not BasicUTFRegexp.match(v):
         logging.error("Invalid UTF8 string.")
         return -1
     try:
         utf8s = v.encode("utf-8")
-        len = len(utf8s)
-        w.write(struct.pack("!H", len))
+        rlen = len(utf8s)
+        w.write(struct.pack("!H", rlen))
         w.write(utf8s)
     except Exception as e:
         logging.exception(repr(e))
-    return len
+    return rlen
 
 def read_uvarint(r: io.BytesIO) -> int:
     val = 0; mtp = 1
     while True:
-        b, = struct.unpack("!B", r.read(1))
-        val += (b & 0x7F) * mtp
-        mtp *= 128
-        if mtp > 2097152: # 128*128*128 = 2^21
-            return None
-        if b & 0x80:
-            continue
+        buff = r.read(1)
+        if buff:
+            b, = struct.unpack("!B", buff)
+            val += (b & 0x7F) * mtp
+            mtp *= 128
+            if mtp > 2097152: # 128*128*128 = 2^21
+                return None
+            if not (b & 0x80):
+                break
+        elif mtp==1:
+            return 0
         else:
-            break
+            return None
     return val
 
 def write_uvarint(w: io.BytesIO, v: int) -> bool:
@@ -135,7 +133,7 @@ def read_binary_data(r: io.BytesIO) -> bytes:
     return r.read(len)
 
 def write_binary_data(w: io.BytesIO, v: bytes) -> int:
-    write_int16(len(v))
+    write_int16(w, len(v))
     return w.write(v)
 
 def read_rest_data(r: io.BytesIO) -> bytes:

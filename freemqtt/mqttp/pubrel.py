@@ -21,11 +21,11 @@ class Pubrel(Packet):
         return self.rcode
     
     def set_reason_code(self, code: int) -> None:
-        self.reason_code = code
+        self.rcode = code
 
     # unpack pubrel packet
     def unpack(self, r: io.BytesIO) -> int:
-        if self.flags() != 0x00:
+        if self.flags() != 0x02:
             logging.error(f"Error pubrel flags: {self.flags():02X}")
             return False
 
@@ -56,10 +56,12 @@ class Pubrel(Packet):
     def pack(self) -> bytes:
         w = io.BytesIO()
         # packet id
-        utils.write_int16(w, self.pid())
+        utils.write_int16(w, self.pid)
         if self.version == protocol.MQTT50 :
             # reason code
+           # utils.write_int8(w, self.rcode)
             utils.write_int8(w, self.reason_code())
+
             # properties
             ppdata = self.propset.pack()
             plen = len(ppdata)

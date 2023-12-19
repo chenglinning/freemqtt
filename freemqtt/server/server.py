@@ -2,8 +2,9 @@
 # All rights reserved
 from tornado import gen
 from tornado.tcpserver import TCPServer    
-from .memdb import MemDB
 from .waiter import Waiter
+from .memdb import MemDB
+
 PUB_SYS_INFO_INTERVAL = 15
 class MQTTServer(TCPServer):
     def __init__(self, *args, **kwargs):

@@ -8,9 +8,11 @@ import time
 import logging
 from site import venv
 from .packet import Packet
-from .pktype import PacketType
+from .pktype import PacketType, QoS
 from .property import PropertSet, Property
 from . import protocol, utils
+from ..server.config import Config
+
 class Publish(Packet):
     def __init__(self, ver:int=protocol.MQTT311) -> None:
         super(Publish, self).__init__(ver, PacketType.PUBLISH)
@@ -19,11 +21,12 @@ class Publish(Packet):
         self.expire_at = None
         self.propset = PropertSet(PacketType.PUBLISH)
         self.from_clientid = None
+        self.sharing = False
 
     def expired_interval(self) -> int:
         ep = self.propset.get(Property.Message_Expiry_Interval)
         if not ep:
-            return 3600*8   # 8 hours
+            return Config.message_expiry_interval
         return ep
 
     def set_expired_interval(self, val: int) -> bool:
@@ -40,24 +43,19 @@ class Publish(Packet):
 
     # unpack connack packet on client side
     def unpack(self, r: io.BytesIO) -> bool:
-        if self.qos > protocol.QoS2 :
+        if self.qos > QoS.qos2 :
             logging.error(f"Error QoS: {self.qos}")
             return False
         # topic
-        readok, topic = utils.read_string(r)
-        if readok:
-            if self.version==protocol.MQTT311 and not topic:
-                logging.error("Error parse topic")
-                return False
+        topic = utils.read_string(r)
+        if self.version==protocol.MQTT311 and not topic:
+            logging.error("Error parse topic")
+            return False
+        if topic:
             if not utils.TopicPublishRegexp.match(topic):
                 logging.error(f"Invalid will topic: {topic}")
                 return False
-        else:
-            logging.error("Error parse topic")
-            return False
-        
         self.topic = topic
-
 	    # packet id
         if self.qos > 0:
             pid = utils.read_int16(r)
@@ -82,7 +80,8 @@ class Publish(Packet):
         # expire at
         if self.version == protocol.MQTT50:
             self.expire_at = time.time() + self.expired_interval()
-            pass
+        else:
+            self.expire_at = time.time() + Config.message_expiry_interval
         return True
 
     # pack connect packet on client server

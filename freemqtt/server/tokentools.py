@@ -23,7 +23,7 @@ def signToken(appid:str, /) -> str:
     ct64 = b64encode(ct).decode('utf-8')
     return ct64
 
-def verifyToken(token:str, /) -> Dict:
+def verifyToken(token:str, /) -> str:
     key = bytes.fromhex(HEX_KEY)
     iv = bytes.fromhex(HEX_IV)
     cipher = AES.new(key, AES.MODE_CBC, iv)
@@ -34,5 +34,5 @@ def verifyToken(token:str, /) -> Dict:
     data0 = appid+nonce
     hexHash = hashlib.md5(data0.encode('utf8')).hexdigest()[:8]
     if sig==hexHash:
-        return {"appid": appid, "nonce": nonce, "sig":sig}
+        return appid
     return None

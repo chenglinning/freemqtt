@@ -12,6 +12,9 @@ class Reason(IntEnum):
 	RefusedIdentifierRejected           = 0x02
 	RefusedServerUnavailable            = 0x03
 	RefusedBadUsernameOrPassword        = 0x04
+
+	DisconnectWithWillMessage 			= 0x04
+
 	RefusedNotAuthorized                = 0x05
 	NoMatchingSubscribers               = 0x10
 	NoSubscriptionExisted               = 0x11
@@ -142,7 +145,7 @@ packetTypeReasonCodeMap = {
 
 	PacketType.DISCONNECT: {
 		Reason.Success:                           True,
-		Reason.RefusedBadUsernameOrPassword:      True,
+		Reason.DisconnectWithWillMessage:         True,
 		Reason.UnspecifiedError:                  True,
 		Reason.MalformedPacket:                   True,
 		Reason.ProtocolError:                     True,

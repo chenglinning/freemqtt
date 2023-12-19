@@ -37,6 +37,10 @@ class Connect(Packet):
     def receive_maximum(self) -> int:
         rm = self.propset.get(Property.Receive_Maximum)
         return  1024 if rm==None else rm
+    
+    def session_expiry_interval(self) -> int:
+        sei = self.propset.get(Property.Session_Expiry_Interval)
+        return  sei if sei else 0
 
     def set_username(self, name: str) -> None:
         self.username = name
@@ -76,10 +80,9 @@ class Connect(Packet):
     # unpack conncet packet on server side
     def unpack(self, r: io.BytesIO) -> bool:
         proto_name = utils.read_string(r)
-        if proto_name != "MQTT":
+        if not proto_name or proto_name != "MQTT":
             logging.error(f"Error protocol name: {proto_name}")
             return False
-
         proto_ver = utils.read_int8(r)
         if proto_ver != protocol.MQTT311 and proto_ver != protocol.MQTT50:
             logging.error(f"Error protocol version: {proto_ver}")
@@ -123,26 +126,25 @@ class Connect(Packet):
                 return False
 
     	# MQTT3.1.1 5.0  reading client id
-        readok, self.clientid = utils.read_string(r)
-        if readok:
-            if self.clientid is None:
-                self.clientid = uuid.uuid1().hex[0:8]
-        else:
-            return False
+        self.clientid = utils.read_string(r)
+        if not self.clientid:
+            if not self.clean_start:
+                return False
+            self.clientid = uuid.uuid1().hex[0:8]
+            self.assigned_id = True
         
         # Parsing will data
         if self.will:
             # will properties
             if proto_ver==protocol.MQTT50 :
-                if not self.willpropset.upack(r):
+                if not self.willpropset.unpack(r):
                     logging.error("Error parsing will properties")
                     return False
             # will topic
-            readok, will_topic = utils.read_string(r)
-            if not (readok and will_topic):
+            will_topic = utils.read_string(r)
+            if not will_topic:
                 logging.error("Error parsing will topic")
                 return False
-                
             if not utils.TopicPublishRegexp.match(will_topic):
                 logging.error(f"Invalid will topic: {will_topic}")
                 return False
@@ -156,21 +158,15 @@ class Connect(Packet):
             self.will_message = payload
 
         if self.username_flag:
-            readok, self.username = utils.read_string(r)
-            if readok:
-                if not self.username:
-                    logging.error("Error user name: None")
-                    return False
-            else:
+            self.username = utils.read_string(r)
+            if not self.username:
+                logging.error("Error user name: None")
                 return False
 
         if self.password_flag:
-            readok, self.password = utils.read_string(r)
-            if readok:
-                if not self.password:
-                    logging.error("Error user password: None")
-                    return False
-            else:
+            self.password = utils.read_string(r)
+            if not self.password:
+                logging.error("Error user password: None")
                 return False
                 
         return True

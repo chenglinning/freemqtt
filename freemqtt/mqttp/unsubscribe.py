@@ -52,7 +52,7 @@ class Unsubscribe(Packet):
     def pack(self) -> bytes:
         w = io.BytesIO()
         # packet id
-        utils.write_int16(w, self.pid())
+        utils.write_int16(w, self.pid)
     	# property
         if self.version == protocol.MQTT50:
             ppdata = self.propset.pack()

@@ -4,8 +4,10 @@
 #       http://www.apache.org/licenses/LICENSE-2.0
 #
 import io
+import logging
+
 from enum import IntEnum
-from typing import Any, Dict
+from typing import Any
 from .utils import * 
 from .pktype import PacketType
 
@@ -152,7 +154,7 @@ class StringPair(object):
 class PropertSet(object):
     def __init__(self, pktype: PacketType) -> None:
         self.pktype = pktype
-        self.props:Dict[PacketType, Any] = dict()
+        self.props: dict[Property, Any] = dict()
 
     # reset props
     def reset(self):
@@ -167,20 +169,20 @@ class PropertSet(object):
                     self.props[ppid].append(v)
                 else:
                     self.props[ppid] = [v]
-            elif ppid in self.props[ppid]:
-                # more than once
-                logging.error(f"More than once property:{ppid.name}({ppid:02X})")
-                return False
             else:
                 self.props[ppid] = v
         else:
-            logging.error(f"Invalid property id:{ppid:02X}")
+            logging.error(f"Invalid property {ppid.name} for {self.pktype.name}")
             return False
         return True
 
     # Get proerty value
     def get(self, ppid: Property) -> Any:
-        return self.ppros.get(ppid, None)
+        return self.props.get(ppid, None)
+    
+    # delete proerty value
+    def delete(self, ppid: Property) -> Any:
+        return self.props.pop(ppid, None)
 
     # DupAllowed check if property id allows keys duplication
     def multi_allowed_property (self, ppid: Property) -> bool: 
@@ -237,7 +239,8 @@ class PropertSet(object):
     def write_prop(self, w: io.BytesIO, ppid: Property) -> bool:
         write_uvarint(w, ppid)
         val = self.get(ppid)
-        assert( val )
+        assert(not val is None)
+        logging.debug(f'O {ppid.name}: {val}')
         pptype = property_type(ppid)
         if pptype == PropertyType.One_Byte:
             result = write_int8(w,val)
@@ -262,9 +265,12 @@ class PropertSet(object):
             for v in vlist:
                 write_uvarint(w, ppid)
                 write_uvarint(w, v)
+                logging.debug(f'O {ppid.name}: {v}')
         elif ppid == Property.User_Property:
             for sp in vlist:
-                self.write_string_pair(sp)
+                write_uvarint(w, ppid)
+                self.write_string_pair(w, sp)
+                logging.debug(f'O {ppid.name}: ({sp.k}: {sp.v})')
         else:
             return False
         return True
@@ -282,22 +288,28 @@ class PropertSet(object):
                 logging.error("Error parsing properties ID.")
                 return False
             if not self.valid_prop(ippid):
-                logging.error(f"Error properties ID ({ippid:02X}) for packet type ({self.pktype.name})")
+                logging.error(f"Error properties ID ({ippid:02X}) for {self.pktype.name}")
                 return False
             ppid = Property(ippid)
             pplen -= vlen(ippid)
             pptype = property_type(ippid)
-            v = self.read_property_val(r)
-            if v:
-                if not self.set(ppid, v):
-                    return False
-            else:
-                logging.error(f"Error reading property {ppid.name} ({ppid:02X}) for packet type ({self.pktype.name})")
+            v = self.read_property_val(r, pptype)
+            dup = self.multi_allowed_property(ppid)
+            if not dup and ppid in self.props:
+                logging.error(f'include the {ppid.name} more than once in {self.pktype.name}')
                 return False
+            if not self.set(ppid, v):
+                return False
+
+            if ppid==Property.User_Property:
+                logging.debug(f'I {ppid.name}: ({v.k}: {v.v})')
+            else:
+                logging.debug(f'I {ppid.name}: {v}')
             pplen -= property_len(pptype, v)
         return True
 
     def pack(self) -> bytes:
+       #logging.info(f'properties packing....')
         w = io.BytesIO()
         for ppid in self.props:
             dup = self.multi_allowed_property(ppid)

@@ -19,10 +19,6 @@ class Packet(object):
         self.qos = QoS.qos0
         self.retain = False
 
-    # get payload of packet
-    def payload(self) -> bytes:
-        return bytearray()
-    
     # get packet type
     def get_type(self) -> PacketType:
         return self.pktype
@@ -73,13 +69,12 @@ class Packet(object):
 
     # set fixed header flags
     def set_flags(self, flags: int) -> None:
-        self.dup = flags & mask.Dup > 0
-        self.qos = flags & mask.Qos >> 1
-        self.retain = flags & mask.Retain > 0
-
+        self.dup = (flags & mask.Dup) > 0
+        self.qos = (flags & mask.Qos) >> 1
+        self.retain = (flags & mask.Retain) > 0
     # Get fixed header first byte
     def fixed_header(self) -> int:
-        return self.type << 4 | self.dup << 3 | self.qos << 1 | self.retain
+        return self.pktype << 4 | self.dup << 3 | self.qos << 1 | self.retain
 
     # Get fixed header flags
     def flags(self) -> int:
@@ -92,7 +87,7 @@ class Packet(object):
         pass
     
     # Get entire pack of packet
-    async def full_pack(self) -> bytes:
+    def full_pack(self) -> bytes:
         w = io.BytesIO()
         fh = self.fixed_header()
         rdata = self.pack()

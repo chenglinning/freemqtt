@@ -10,7 +10,7 @@ import asyncio
 
 import tornado.options
 import tornado.autoreload
-from .server import MQTTServer
+from freemqtt.server.server import MQTTServer
 
 tornado.options.define("port", default=7883, help="Run FreeMQTT Server on a specific port", type=int)  
 tornado.options.define("ssl_port", default=8883, help="Run FreeMQTT Server on a specific SSL port", type=int)  
@@ -21,6 +21,8 @@ tornado.options.define("mqtt_via_ssl", default=False, help="enable ssl", type=bo
 async def main():
     tornado.options.parse_command_line()
     tornado.autoreload.start()
+#   logging.basicConfig(level=logging.ERROR)
+    logging.getLogger().setLevel(level=logging.DEBUG)
     logging.info("FreeMQTT Server 1.0 started")
         
     if tornado.options.options.mqtt_via_ssl:
