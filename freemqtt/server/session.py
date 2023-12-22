@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Copyright (C) 2010-2014 Internet Message Shuttle
 # Chenglin Ning, chenglinning@gmail.com
 # All rights reserved
@@ -139,7 +138,7 @@ class MQTTSession(object):
 
         if qos==QoS.qos0 and self.waiter.state==State.CONNECTED:
             data = packet2.full_pack()
-            await self.waiter.stream.write(data)
+            await self.waiter.transport.write(data)
             logging.info(f"S PUBLISH {topic} (d{dup} q{qos} r{retain} m{pid}) {self.waiter.connect.clientid} level({packet2.get_version()})")
             return True
         
@@ -156,7 +155,7 @@ class MQTTSession(object):
 
         if self.waiter.state==State.CONNECTED:
             data = packet2.full_pack()
-            await self.waiter.stream.write(data)
+            await self.waiter.transport.write(data)
             logging.info(f"S PUBLISH {topic} (d{dup} q{qos} r{retain} m{pid}) {clientid} level({packet2.get_version()})")
             return True
         else:
@@ -174,5 +173,5 @@ class MQTTSession(object):
                 packet.set_expired_interval(int(packet.expire_at - now))
             packet.set_dup(True)
             data = packet.full_pack()
-            await self.waiter.stream.write(data)
+            await self.waiter.transport.write(data)
             logging.info(f"Resume {packet.pktype.name} (m{pid}) to {self.waiter.connect.clientid} level({packet.get_version()})")

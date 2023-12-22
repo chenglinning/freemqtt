@@ -6,13 +6,12 @@
 import time
 import logging
 import struct
-import re
+from typing import Awaitable
 
 from io import BytesIO
 from typing import Tuple, Dict
 from tornado.ioloop import IOLoop
 from tornado import gen
-from tornado.iostream import StreamClosedError
 
 from .config import Config
 from .authplugin import AuthPlugin
@@ -39,11 +38,11 @@ from ..mqttp.disconnect import Disconnect
 from ..mqttp.auth import Auth
 
 from ..mqttp import mask
-from ..mqttp.packet import Packet
 from ..mqttp import protocol
 from ..mqttp.pktype import PacketType, QoS
 from ..mqttp.property import Property
 from ..mqttp.reason_code import Reason, validReasoneCode
+from ..transport import TransportClosedError
 
 PUB_SYS_INFO_INTERVAL = 15
 INIT_INTERVAL = 10
@@ -53,7 +52,7 @@ CLOSED = 8
 FACTOR = 1.5
 
 class Waiter(object):
-    def __init__(self, stream, address):
+    def __init__(self, transport, address):
         self.state = State.INITIATED
         self.app = None
         self.connect = None
@@ -64,7 +63,7 @@ class Waiter(object):
         self.appid = None
         self.appname = None
         self.last_timestamp = time.time()
-        self.stream = stream
+        self.transport = transport
         self.remote_ip = address
         self.received_bytes = 0
         self.receive_quota = 0
@@ -115,22 +114,22 @@ class Waiter(object):
             return False
         return True
 
-    async def publish_system_info(self):
+    async def publish_system_info(self) -> Awaitable[None]:
     	while True:
             await gen.sleep(PUB_SYS_INFO_INTERVAL)
             await self.mem_db.update_sys_info_topic()
 
-    async def read_pktype_flags(self) -> Tuple[int, int]:
-        buff = await self.stream.read_bytes(1)
+    async def read_pktype_flags(self) -> Awaitable[Tuple[int, int]]:
+        buff = await self.transport.read_bytes(1)
         b, = struct.unpack("!B", buff)
         flags = b & mask.Flags
         pktype = b >> 4
         return (pktype, flags)
 
-    async def read_remaining_length(self) -> int:
+    async def read_remaining_length(self) -> Awaitable[int]:
         val = 0; mtp = 1
         while True:
-            buff = await self.stream.read_bytes(1)
+            buff = await self.transport.read_bytes(1)
             b, = struct.unpack("!B", buff)
             val += (b & 0x7F) * mtp
             mtp *= 128
@@ -142,7 +141,7 @@ class Waiter(object):
                 break
         return val
 
-    async def recv_mqtt_packet(self) -> Packet:
+    async def recv_mqtt_packet(self) -> Awaitable[Packet]:
         # read packet type & flags (fixed header first byte)
         pktype, flags = await self.read_pktype_flags()
 #       logging.info(f"pktype: {pktype} flags: {flags: 02X}")
@@ -161,7 +160,7 @@ class Waiter(object):
             return None
         
         # read remaining data    
-        data = await self.stream.read_bytes(remain_len)
+        data = await self.transport.read_bytes(remain_len)
         self.received_bytes += remain_len 
         # unpack remaining data
         packet = PacketClass.get(pktype)(ver=self.protocol_version)
@@ -172,7 +171,7 @@ class Waiter(object):
         reader.close()
         return packet
 
-    async def start_serving(self) -> None:
+    async def start_serving(self) -> Awaitable[None]:
         logging.info(f"TCP connecting from {self.remote_ip}")
         IOLoop.current().spawn_callback(self.connect_timout)
         while True:
@@ -185,19 +184,19 @@ class Waiter(object):
                 else:
                     if self.state == State.CONNECTED and self.protocol_version==protocol.MQTT50:
                         await self.disconnect(Reason.MalformedPacket)
-                    self.stream.close()
-            except StreamClosedError:
+                    self.transport.close()
+            except TransportClosedError:
                 logging.error(f"remote: {self.remote_ip} be closed")
                 await self.closed_handler()
                 break
             
-    async def handle_packet(self, packet: Packet) -> None:
+    async def handle_packet(self, packet: Packet) -> Awaitable[None]:
         handler = self.handlers[packet.get_type()]
         await handler(packet)
 
-    async def connect_handler(self, packet: Connect) -> None:
+    async def connect_handler(self, packet: Connect) -> Awaitable[None]:
         if self.state != State.INITIATED:
-            self.stream.close()            
+            self.transport.close()            
             logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
             return
         self.state = State.CONNECTING
@@ -207,7 +206,7 @@ class Waiter(object):
         if not self.appid:
             rcode = Reason.RefusedBadUsernameOrPassword
             await self.connack(0x00, rcode)
-            self.stream.close()
+            self.transport.close()
             logging.info(f"Connection be closed. Reason: {rcode.name}")
             return
         
@@ -217,7 +216,7 @@ class Waiter(object):
         if self.app.curr_conn_num == connect_max:
             rcode = Reason.QuotaExceeded
             await self.connack(0x00, rcode)
-            self.stream.close()
+            self.transport.close()
             logging.info(f"Connection be closed. Reason: {rcode.name}")
 
         ack_flags = 0x00
@@ -230,7 +229,7 @@ class Waiter(object):
                 waiter.state = State.KICKOUT
                 need_resume = False
                 await waiter.disconnect(Reason.SessionTakenOver)
-                waiter.stream.close()
+                waiter.transport.close()
                 logging.info(f"KICKOUT: clientid: {packet.clientid} ip: {waiter.remote_ip}")
             else:
                 need_resume = True
@@ -259,7 +258,7 @@ class Waiter(object):
             await self.app.getSession(packet.clientid).resume()
         return
 
-    async def connack(self, ack_flags: int, rcode: Reason) -> None:
+    async def connack(self, ack_flags: int, rcode: Reason) -> Awaitable[None]:
         packet = Connack(self.protocol_version)
         if self.protocol_version == protocol.MQTT50 and rcode==Reason.Success:
             # Session Expiry Interval
@@ -304,26 +303,26 @@ class Waiter(object):
         packet.set_reason_code(rcode)
         
         data = packet.full_pack()
-        await self.stream.write(data)
+        await self.transport.write(data)
         logging.info(f"S CONNACK {self.connect.clientid}")
 
-    async def disconnect(self, rcode: Reason) -> None:
+    async def disconnect(self, rcode: Reason) -> Awaitable[None]:
         packet = Disconnect(self.protocol_version)
         if self.protocol_version == protocol.MQTT50:
             packet.set_reason_code(rcode)
             packet.set_reason_string(rcode.name)
             data = packet.full_pack()
-            await self.stream.write(data)
+            await self.transport.write(data)
         self.state = State.DISCONNECTED_BY_SERVER
-        self.stream.close()
+        self.transport.close()
         logging.info(f"S DISCONNECT client_id:{self.connect.clientid}")
 
-    async def publish_handler(self, packet: Publish) -> None:
+    async def publish_handler(self, packet: Publish) -> Awaitable[None]:
         if self.state != State.CONNECTED:
             logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
             if self.protocol_version == protocol.MQTT50:
                 await self.disconnect(Reason.ProtocolError)
-            self.stream.close()
+            self.transport.close()
             logging.error(f"Connection be closed. reason: ProtocolError")
             return
         qos = packet.get_qos()
@@ -339,7 +338,7 @@ class Waiter(object):
                 await self.disconnect(Reason.ProtocolError)
             else:
                 self.state = State.DISCONNECTED_BY_SERVER
-            self.stream.close()
+            self.transport.close()
             logging.error("Connection be closed. Reason: d{dup} q{qos}")
             return
         
@@ -348,7 +347,7 @@ class Waiter(object):
                 await self.disconnect(Reason.InvalidTopicName)
             else:
                 self.state = State.DISCONNECTED_BY_SERVER
-            self.stream.close()
+            self.transport.close()
             logging.error("Connection be closed. Reason: InvalidTopicName")
             return
 
@@ -397,50 +396,50 @@ class Waiter(object):
         if payload:
             await self.app.dispatch(packet)
 
-    async def puback(self, pid: PacketID, rcode: Reason) -> None:
+    async def puback(self, pid: PacketID, rcode: Reason) -> Awaitable[None]:
         packet = Puback(self.protocol_version)
         packet.set_pid(pid)
         if self.protocol_version == protocol.MQTT50:
             packet.set_reason_code(rcode)
         data = packet.full_pack()
-        await self.stream.write(data)
+        await self.transport.write(data)
         logging.info(f"S PUBACK (m{pid}) {self.connect.clientid}")
         
-    async def pubrec(self, pid: PacketID, rcode: Reason) -> None:
+    async def pubrec(self, pid: PacketID, rcode: Reason) -> Awaitable[None]:
         packet = Pubrec(self.protocol_version)
         packet.set_pid(pid)
         if self.protocol_version == protocol.MQTT50:
             packet.set_reason_code(rcode)
         data = packet.full_pack()
-        await self.stream.write(data)
+        await self.transport.write(data)
         logging.info(f"S PUBREC (m{pid}) {self.connect.clientid}")
 
-    async def pubrel(self, pid: PacketID, rcode: Reason) -> None:
+    async def pubrel(self, pid: PacketID, rcode: Reason) -> Awaitable[None]:
         packet = Pubrel(self.protocol_version)
         packet.set_pid(pid)
         self.app.getSession(self.connect.clientid).add_outgoing_inflight_message(packet)
         if self.protocol_version == protocol.MQTT50:
             packet.set_reason_code(rcode)
         data = packet.full_pack()
-        await self.stream.write(data)
+        await self.transport.write(data)
         logging.info(f"S PUBREL (m{pid}) {self.connect.clientid}")
 
-    async def pubcomp(self, pid: PacketID, rcode: Reason) -> None:
+    async def pubcomp(self, pid: PacketID, rcode: Reason) -> Awaitable[None]:
         packet = Pubcomp(self.protocol_version)
         packet.set_pid(pid)
         if self.protocol_version == protocol.MQTT50:
             packet.set_reason_code(rcode)
         data = packet.full_pack()
-        await self.stream.write(data)
+        await self.transport.write(data)
 
         logging.info(f"S PUBCOMP (m{pid}) {self.connect.clientid}")
 
-    async def puback_handler(self, packet: Puback) -> None:
+    async def puback_handler(self, packet: Puback) -> Awaitable[None]:
         if self.state != State.CONNECTED:
             logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
             if self.protocol_version == protocol.MQTT50:
                 await self.disconnect(Reason.ProtocolError)
-            self.stream.close()
+            self.transport.close()
             logging.error(f"Connection be closed. reason: ProtocolError")
             return
         pid = packet.get_pid()
@@ -452,12 +451,12 @@ class Waiter(object):
             return
         self.app.getSession(clientid).remove_outgoing_inflight_message(pid)
 
-    async def pubrec_handler(self, packet: Pubrec) -> None:
+    async def pubrec_handler(self, packet: Pubrec) -> Awaitable[None]:
         if self.state != State.CONNECTED:
             logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
             if self.protocol_version == protocol.MQTT50:
                 await self.disconnect(Reason.ProtocolError)
-            self.stream.close()
+            self.transport.close()
             logging.error(f"Connection be closed. reason: ProtocolError")
             return
         pid = packet.get_pid()
@@ -469,12 +468,12 @@ class Waiter(object):
             return
         await self.pubrel(pid, Reason.Success)
 
-    async def pubrel_handler(self, packet: Pubrel) -> None:
+    async def pubrel_handler(self, packet: Pubrel) -> Awaitable[None]:
         if self.state != State.CONNECTED:
             logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
             if self.protocol_version == protocol.MQTT50:
                 await self.disconnect(Reason.ProtocolError)
-            self.stream.close()
+            self.transport.close()
             logging.error(f"Connection be closed. reason: ProtocolError")
             return
         pid = packet.get_pid()
@@ -487,12 +486,12 @@ class Waiter(object):
         self.app.getSession(clientid).remove_incoming_inflight_message(pid)
         await self.pubcomp(pid, Reason.Success)
 
-    async def pubcomp_handler(self, packet: Pubcomp) -> None:
+    async def pubcomp_handler(self, packet: Pubcomp) -> Awaitable[None]:
         if self.state != State.CONNECTED:
             logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
             if self.protocol_version == protocol.MQTT50:
                 await self.disconnect(Reason.ProtocolError)
-            self.stream.close()
+            self.transport.close()
             logging.error(f"Connection be closed. reason: ProtocolError")
             return
         pid = packet.get_pid()
@@ -504,21 +503,21 @@ class Waiter(object):
             return
         self.app.getSession(clientid).remove_outgoing_inflight_message(pid)
 
-    async def suback(self, pid: PacketID, rcodes: list[Reason]) -> None:
+    async def suback(self, pid: PacketID, rcodes: list[Reason]) -> Awaitable[None]:
         packet = Suback(self.protocol_version, rcodes)
         packet.set_pid(pid)
         data = packet.full_pack()
-        await self.stream.write(data)
+        await self.transport.write(data)
         logging.info(f"S SUBACK (m{pid}) {self.connect.clientid}")
 
-    async def unsuback(self, pid: PacketID, rcodes: list[Reason]) -> None:
+    async def unsuback(self, pid: PacketID, rcodes: list[Reason]) -> Awaitable[None]:
         packet = Unsuback(self.protocol_version, rcodes)
         packet.set_pid(pid)
         data = packet.full_pack()
-        await self.stream.write(data)
+        await self.transport.write(data)
         logging.info(f"S UNSUBACK (m{pid}) {self.connect.clientid}")
 
-    async def subscribe_handler(self, packet: Subscribe) -> None:
+    async def subscribe_handler(self, packet: Subscribe) -> Awaitable[None]:
         clientid = self.connect.clientid
         logging.info(f"R SUBSCRIBE (m{packet.pid}) {clientid}")
 
@@ -546,7 +545,7 @@ class Waiter(object):
         await self.suback(pid, rcodes)
         await self.app.dispatchRetainMessages(packet, clientid)
 
-    async def unsubscribe_handler(self, packet: Unsubscribe) -> None:
+    async def unsubscribe_handler(self, packet: Unsubscribe) -> Awaitable[None]:
         if self.state != State.CONNECTED:
             logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
             if self.protocol_version == protocol.MQTT50:
@@ -565,13 +564,13 @@ class Waiter(object):
         logging.info(f"R UNSUBSCRIBE (m{pid}) {clientid}")
         await self.unsuback(pid, rcodes)
 
-    async def pingresp(self) -> None:
+    async def pingresp(self) -> Awaitable[None]:
         packet = Pingresp(self.protocol_version)
         data = packet.full_pack()
-        await self.stream.write(data)
+        await self.transport.write(data)
         logging.info(f"S PINGRESP {self.connect.clientid}")
 
-    async def pingreq_handler(self, packet: Pingreq) -> None:
+    async def pingreq_handler(self, packet: Pingreq) -> Awaitable[None]:
         if self.state != State.CONNECTED:
             logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
             if self.protocol_version == protocol.MQTT50:
@@ -581,7 +580,7 @@ class Waiter(object):
         logging.info(f"R PINGREQ  {self.connect.clientid}")
         await self.pingresp()
 
-    async def disconnect_handler(self, packet: Disconnect) -> None:
+    async def disconnect_handler(self, packet: Disconnect) -> Awaitable[None]:
         sei = packet.session_expiry_interval()
         sei0 = self.connect.session_expiry_interval()
         self.disconnect_rcode = packet.rcode
@@ -600,9 +599,9 @@ class Waiter(object):
         self.state = State.DISCONNECTED_BY_CLIENT
         if self.protocol_version == protocol.MQTT50 and packet.rcode==Reason.DisconnectWithWillMessage:
             await self.deliveryWillMsg()
-        self.stream.close()
+        self.transport.close()
 
-    async def deliveryWillMsg(self) -> None:
+    async def deliveryWillMsg(self) -> Awaitable[None]:
         if not self.connect.will:
             return
         packet = Publish(ver=self.protocol_version)
@@ -626,20 +625,21 @@ class Waiter(object):
         logging.info(f"Will Message topic: {self.connect.will_topic} qos: {self.connect.will_qos}")
         await self.app.dispatch(packet)
 
-    async def auth_handler(self, packet: Auth) -> None:
+    async def auth_handler(self, packet: Auth) -> Awaitable[None]:
         await self.disconnect(Reason.ImplementationSpecificError)
-        self.stream.close()
+        self.transport.close()
         logging.info(f"R AUTH {self.connect.clientid}, but not implimented")
 
-    async def closed_handler(self) -> None:
+    async def closed_handler(self) -> Awaitable[None]:
         if self.state == State.CONNECTED:
             self.state = State.CLOSED
             await self.deliveryWillMsg()
         elif self.state==State.INITIATED:
             return 
-        if self.state==State.KICKOUT:
+        logging.debug(f'state: {self.state.name}')
+        if self.state==State.KICKOUT or self.state==State.DISCONNECTED_BY_CLIENT:
             self.app.delSession(self.connect.clientid)
-        else:
+        elif self.state==State.CLOSED:
             if self.connect.get_version()==protocol.MQTT311:
                 sei = self.app.sei
                 await self.session_expired(sei)
@@ -652,23 +652,23 @@ class Waiter(object):
                 else:
                     self.app.delSession(self.connect.clientid)
 
-    async def connect_timout(self) -> None:
+    async def connect_timout(self) -> Awaitable[None]:
         await gen.sleep(INIT_INTERVAL)
         if self.state == State.INITIATED:
             logging.error(f"CONNECT TIMEOUT ip: {self.remote_ip}")
-            self.stream.close()
+            self.transport.close()
 
-    async def keep_alive_timeout(self) -> None:
+    async def keep_alive_timeout(self) -> Awaitable[None]:
         duration = self.keep_alive * FACTOR
         while self.state == State.CONNECTED:
             await gen.sleep(duration)
             cur_timestamp = time.time()
             if self.state == State.CONNECTED and cur_timestamp - self.last_timestamp > duration:
                 logging.info(f"TIMEOUT: clientID: {self.connect.clientid} ip: {self.remote_ip}")
-                self.stream.close()
+                self.transport.close()
                 return
 
-    async def session_expired(self, sei: int) -> None:
+    async def session_expired(self, sei: int) -> Awaitable[None]:
         self.state = State.WAITING_EXPIRED
         await gen.sleep(sei)
         session = self.app.getSession(self.connect.clientid)

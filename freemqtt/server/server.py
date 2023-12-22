@@ -4,7 +4,7 @@ from tornado import gen
 from tornado.tcpserver import TCPServer    
 from .waiter import Waiter
 from .memdb import MemDB
-
+from ..transport import TCPTranport
 PUB_SYS_INFO_INTERVAL = 15
 class MQTTServer(TCPServer):
     def __init__(self, *args, **kwargs):
@@ -14,7 +14,7 @@ class MQTTServer(TCPServer):
         IOLoop.current().spawn_callback(self.publish_system_info)
         """
     async def handle_stream(self, stream, address):
-        waiter = Waiter(stream, address)
+        waiter = Waiter(TCPTranport(stream), address)
         await waiter.start_serving()
 
     async def publish_system_info(self):

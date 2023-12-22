@@ -10,11 +10,28 @@ import asyncio
 
 import tornado.options
 import tornado.autoreload
+import tornado.web
+from tornado.web import RequestHandler
 from freemqtt.server.server import MQTTServer
+from freemqtt.server.wsserver import MqttWebsocketHandler
+class My404Handler(RequestHandler):
+    # Override prepare() instead of get() to cover all possible HTTP methods.
+    def prepare(self):
+        self.set_status(404)
+        self.write_error(404)
+
+def make_app():
+    return tornado.web.Application(
+        [(r"/mqtt", MqttWebsocketHandler)],
+    	debug=True,
+        default_handler_class=My404Handler,
+        websocket_ping_interval=10,
+        websocket_ping_timeout=15,
+    )
 
 tornado.options.define("port", default=7883, help="Run FreeMQTT Server on a specific port", type=int)  
 tornado.options.define("ssl_port", default=8883, help="Run FreeMQTT Server on a specific SSL port", type=int)  
-tornado.options.define("port_websocket", default=1885, help="Run FreeMQTT Server on a specific port", type=int)  
+tornado.options.define("ws_port", default=8000, help="Run FreeMQTT Server over websocket on a specific port", type=int)  
 tornado.options.define("propagate", default=False, help="disable propagate", type=bool)
 tornado.options.define("mqtt_via_ssl", default=False, help="enable ssl", type=bool )  
 
@@ -35,8 +52,15 @@ async def main():
     else:
         server = MQTTServer( ssl_options=None )
         mqtt_port = tornado.options.options.port
-
     server.listen(mqtt_port, address="127.0.0.1")
+
+    """
+    MQTT over Websocket Server
+    """
+    app = make_app()
+    http_server = tornado.httpserver.HTTPServer(app, xheaders=True)
+    http_server.listen(tornado.options.options.ws_port, address="127.0.0.1")
+
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
