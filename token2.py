@@ -1,7 +1,7 @@
 from base64 import b64encode, b64decode
 from freemqtt.server.tokentools import signToken, verifyToken
 if __name__ == "__main__":
-    token = signToken("12abcdefedeee")
+    token = signToken("guojie_app")
     data = verifyToken(token)
     print ("******************************")
     print (token)

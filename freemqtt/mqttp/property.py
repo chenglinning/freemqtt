@@ -6,6 +6,7 @@
 import io
 import logging
 
+from typing import Dict
 from enum import IntEnum
 from typing import Any
 from .utils import * 
@@ -154,7 +155,7 @@ class StringPair(object):
 class PropertSet(object):
     def __init__(self, pktype: PacketType) -> None:
         self.pktype = pktype
-        self.props: dict[Property, Any] = dict()
+        self.props: Dict[Property, Any] = dict()
 
     # reset props
     def reset(self):

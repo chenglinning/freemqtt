@@ -4,13 +4,14 @@
 #       http://www.apache.org/licenses/LICENSE-2.0
 #
 import logging
+from typing import Tuple
 from .tokentools import verifyToken
 class AuthPlugin(object):
     def __init__(self):
         self.appid = None
         self.connect_max = 128
 
-    def auth_token(self, token:str=None) -> tuple[str, int]:
+    def auth_token(self, token:str=None) -> Tuple[str, int]:
         logging.info(f'Token: {token}')
         try:
             appid = verifyToken(token)

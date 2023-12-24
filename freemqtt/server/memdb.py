@@ -1,4 +1,5 @@
 import time, random, logging
+from typing import Dict, Set, Tuple, List
 from copy import copy
 from tornado.ioloop import IOLoop
 
@@ -29,18 +30,18 @@ class MqttApp(object):
         self.inflight_in = 0
 
         # sessions database
-        self.ssdb: dict[ClientID, MQTTSession] = {}
+        self.ssdb: Dict[ClientID, MQTTSession] = {}
         
         # no share subscription database
-        self.subdb: dict[TopicFilter, dict[ClientID, SubOption]] = {}
+        self.subdb: Dict[TopicFilter, Dict[ClientID, SubOption]] = {}
 
         # share subscription database
-        self.sharedb: dict[ShareName, dict[TopicFilter, dict[ClientID, SubOption]]] = {}
+        self.sharedb: Dict[ShareName, Dict[TopicFilter, Dict[ClientID, SubOption]]] = {}
 
         # Topic filter matched topics of retain message
-        self.tf_retain_topics: dict[TopicFilter, set[Topic]] = {}
+        self.tf_retain_topics: Dict[TopicFilter, Set[Topic]] = {}
         # retain message
-        self.retain_msg: dict[Topic, Packet] = {}
+        self.retain_msg: Dict[Topic, Packet] = {}
 
     def addSubscription(self, tf: TopicFilter, top: TopicOptPair, clientid: ClientID) -> None:
         subopt = SubOption(options=top.options, subid=top.sub_id)
@@ -99,7 +100,7 @@ class MqttApp(object):
             waiter = None
         return waiter
     
-    def getSubscribersDict(self, tf: TopicFilter) -> dict[ClientID, SubOption]:
+    def getSubscribersDict(self, tf: TopicFilter) -> Dict[ClientID, SubOption]:
         c2subs = {}
         subs = self.subdb.get(tf, {})
         for clientid, suboption in subs.items():
@@ -109,11 +110,11 @@ class MqttApp(object):
                     c2subs[clientid] = suboption
         return c2subs
     
-    def getSharedSubscribersDict(self, tf: TopicFilter) -> dict[ShareName, tuple[ClientID, SubOption]]:
-        sc2subs:dict[ShareName, tuple[ClientID, SubOption]] = {}
+    def getSharedSubscribersDict(self, tf: TopicFilter) -> Dict[ShareName, Tuple[ClientID, SubOption]]:
+        sc2subs: Dict[ShareName, Tuple[ClientID, SubOption]] = {}
         for sharename, sharegroup in self.sharedb.items():
             subs = sharegroup.get(tf, {})
-            c2subs:dict[ClientID, SubOption] = {}
+            c2subs: Dict[ClientID, SubOption] = {}
             for clientid, suboption in subs.items():
                 session = self.getSession(clientid)
                 if session.waiter.state==State.CONNECTED:
@@ -144,7 +145,7 @@ class MqttApp(object):
             session.topicFilterSet.clear()
             del session
 
-    def enumerateTopicFilter(self, tlist:list[str], pos: int, n: int, li: list[str]) -> None:
+    def enumerateTopicFilter(self, tlist: List[str], pos: int, n: int, li: List[str]) -> None:
         if pos < n:
             tl0 = copy(tlist)
             tl1 = copy(tlist)
@@ -159,7 +160,7 @@ class MqttApp(object):
         else:
             return
         
-    def getTFList(self, topic: Topic) -> list[TopicFilter]:
+    def getTFList(self, topic: Topic) -> List[TopicFilter]:
         li = list()
         elist = topic.split('/')
         n = len(elist)
@@ -230,7 +231,7 @@ class MqttApp(object):
 
 class MemDB(object):
     def __init__(self):
-        self.apps: dict[AppID, MqttApp] = {}
+        self.apps: Dict[AppID, MqttApp] = {}
 
     @staticmethod
     def instance():

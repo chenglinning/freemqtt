@@ -3,6 +3,7 @@
 # All rights reserved
 #
 import logging, copy, time
+from typing import Dict, Set
 from ..mqttp.packet import Packet, PacketType
 from ..mqttp.publish import Publish
 from ..mqttp.pktype import QoS
@@ -14,13 +15,13 @@ from .common import State, SubOption, PacketID, ClientID, AppID, Topic, TopicFil
 class MQTTSession(object):
     def __init__(self, waiter: Waiter) -> None:
         self.waiter = waiter
-        self.topicFilterSet : set[TopicFilter] = set()
+        self.topicFilterSet : Set[TopicFilter] = set()
 
         # incoming message in-flight
-        self.incoming_inflight : dict[PacketID, Packet] = {}
+        self.incoming_inflight : Dict[PacketID, Packet] = {}
         
         # outgoing in-flight window  
-        self.outgoing_inflight : dict[PacketID, Packet] = {}
+        self.outgoing_inflight : Dict[PacketID, Packet] = {}
 
         # current pid
         self.curr_pid = 0
@@ -88,7 +89,7 @@ class MQTTSession(object):
     def remove_topic_filter(self, tf: TopicFilter) -> None:
         self.topicFilterSet.discard(tf)
 
-    def get_topic_filter_set(self) -> set[TopicFilter]:
+    def get_topic_filter_set(self) -> Set[TopicFilter]:
         return self.topicFilterSet
 
     def clear_topic_filter_set(self) -> None:
@@ -100,7 +101,7 @@ class MQTTSession(object):
     def is_clean_start(self) -> bool:
         return self.clean_start
 
-    def get_outgoing_inflight_messages(self) -> dict[PacketID, Packet]:
+    def get_outgoing_inflight_messages(self) -> Dict[PacketID, Packet]:
         return self.outgoing_inflight
 
     def get_outgoing_inflight_message(self, pid: PacketID) -> Packet:
