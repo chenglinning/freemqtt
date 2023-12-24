@@ -20,13 +20,13 @@ class MqttWebsocketHandler(WebSocketHandler):
         self.remote_ip = self.request.remote_ip
         logging.info(f"req_uri: {self.request.uri} remote_ip: {self.remote_ip}")
         self.queue = Queue()
-        self.transport = WebsocketTranport(self)
-        waiter = Waiter(self.transport, self.remote_ip)
+        transport = WebsocketTranport(self)
+        waiter = Waiter(transport, self.remote_ip)
         IOLoop.current().spawn_callback(waiter.start_serving)
 
     async def on_message(self, message) -> Optional[Awaitable[None]]:
-#       logging.info(f'Received message: {len(message)} {message}')
         self.queue.put((True, message))
+#       logging.info(f'Received message: {len(message)} {message}')
 
     def on_close(self) -> None:
         logging.info("WebSocket closed")

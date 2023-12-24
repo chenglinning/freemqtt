@@ -135,18 +135,18 @@ class MQTTSession(object):
                 alias = self.next_alias()
                 self.waiter.topic2alias_map[topic] = alias
             packet2.propset.set(Property.Topic_Alias, alias)
-
+            if suboption.subid:
+                packet2.propset.set(Property.Subscription_Identifier, suboption.subid)
+                
         if qos==QoS.qos0 and self.waiter.state==State.CONNECTED:
             data = packet2.full_pack()
             await self.waiter.transport.write(data)
             logging.info(f"S PUBLISH {topic} (d{dup} q{qos} r{retain} m{pid}) {self.waiter.connect.clientid} level({packet2.get_version()})")
             return True
-        
+       
         pid = self.next_pid()      
         packet2.set_dup(False)
         packet2.set_pid(pid)
-        if suboption.subid:
-            packet2.propset.set(Property.Subscription_Identifier, suboption.subid)
         clientid = self.waiter.connect.clientid
         
         packet3 = copy.deepcopy(packet2)

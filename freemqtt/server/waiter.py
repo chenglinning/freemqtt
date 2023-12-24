@@ -251,7 +251,7 @@ class Waiter(object):
         self.keep_alive = packet.keep_alive if packet.keep_alive>0 else Config.server_keep_alive
         IOLoop.current().spawn_callback(self.keep_alive_timeout)
 
-        logging.info(f"R CONNECT {packet.clientid} clean_start({int(packet.clean_start)}) keep_alive_interval({packet.keep_alive}) level({self.protocol_version})")
+        logging.info(f"R CONNECT clean_start({int(packet.clean_start)}) keep_alive_interval({packet.keep_alive}) level({self.protocol_version}) {packet.clientid}")
         await self.connack(ack_flags, Reason.Success)
         self.state = State.CONNECTED
         if need_resume:
