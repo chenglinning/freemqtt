@@ -6,7 +6,7 @@
 import time
 import logging
 import struct
-from typing import Awaitable
+from typing import Awaitable, List
 
 from io import BytesIO
 from typing import Tuple, Dict
@@ -503,14 +503,14 @@ class Waiter(object):
             return
         self.app.getSession(clientid).remove_outgoing_inflight_message(pid)
 
-    async def suback(self, pid: PacketID, rcodes: list[Reason]) -> Awaitable[None]:
+    async def suback(self, pid: PacketID, rcodes: List[Reason]) -> Awaitable[None]:
         packet = Suback(self.protocol_version, rcodes)
         packet.set_pid(pid)
         data = packet.full_pack()
         await self.transport.write(data)
         logging.info(f"S SUBACK (m{pid}) {self.connect.clientid}")
 
-    async def unsuback(self, pid: PacketID, rcodes: list[Reason]) -> Awaitable[None]:
+    async def unsuback(self, pid: PacketID, rcodes: List[Reason]) -> Awaitable[None]:
         packet = Unsuback(self.protocol_version, rcodes)
         packet.set_pid(pid)
         data = packet.full_pack()
