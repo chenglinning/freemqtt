@@ -31,7 +31,7 @@ def make_app():
 
 tornado.options.define("port", default=7883, help="Run FreeMQTT Server on a specific port", type=int)  
 tornado.options.define("ssl_port", default=8883, help="Run FreeMQTT Server on a specific SSL port", type=int)  
-tornado.options.define("ws_port", default=8000, help="Run FreeMQTT Server over websocket on a specific port", type=int)  
+tornado.options.define("ws_port", default=8083, help="Run FreeMQTT Server over websocket on a specific port", type=int)  
 tornado.options.define("propagate", default=False, help="disable propagate", type=bool)
 tornado.options.define("mqtt_via_ssl", default=False, help="enable ssl", type=bool )  
 
