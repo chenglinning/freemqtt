@@ -12,7 +12,6 @@ from io import BytesIO
 from typing import Tuple, Dict
 from tornado.ioloop import IOLoop
 from tornado import gen
-
 from .config import Config
 from .authplugin import AuthPlugin
 from .common import State, PacketClass, Topic, TopicFilter, PacketID 
@@ -49,7 +48,7 @@ KEEP_ALIVE_TIMEOUT = 7
 CLOSED = 8
 FACTOR = 1.5
 
-class MQTTClient(object):
+class Waiter(object):
     def __init__(self, transport, address):
         self.state = State.INITIATED
         self.app = None
@@ -68,8 +67,8 @@ class MQTTClient(object):
         self.send_quota = 0
         self.alias_maximum = 0
 
-        self.alias2topic_map: Dict[int, Topic] = {} # for server side { alias: topic }
-        self.topic2alias_map: Dict[Topic, int] = {} # for client side { topic: alias }
+        self.alias2topic_map: Dict[int, Topic] = {} # for client side { alias: topic }
+        self.topic2alias_map: Dict[Topic, int] = {} # for server side { topic: alias }
         self.disconnect_rcode = Reason.Success
 
         self.handlers = {
@@ -591,6 +590,7 @@ class MQTTClient(object):
                 await self.disconnect(Reason.ProtocolError)
             logging.error(f"Connection be closed. reason: ProtocolError")
             return
+        
         logging.info(f"R DISCONNECT {self.connect.clientid}")
         session = self.app.getSession(self.connect.clientid)
         if session:
