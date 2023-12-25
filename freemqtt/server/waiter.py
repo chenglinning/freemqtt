@@ -188,13 +188,20 @@ class Waiter(object):
                 break
             
     async def handle_packet(self, packet: Packet) -> Awaitable[None]:
-        handler = self.handlers[packet.get_type()]
-        await handler(packet)
+        if self.state == State.CONNECTED or packet.get_type()==PacketType.CONNECT:
+            handler = self.handlers[packet.get_type()]
+            await handler(packet)
+        else:
+            logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
+            logging.error(f"Connection be closed. reason: ProtocolError")
+            if self.protocol_version == protocol.MQTT50:
+                await self.disconnect(Reason.ProtocolError)
+            self.transport.close()
 
     async def connect_handler(self, packet: Connect) -> Awaitable[None]:
         if self.state != State.INITIATED:
-            self.transport.close()            
             logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
+            self.transport.close()            
             return
         self.state = State.CONNECTING
         self.connect = packet
@@ -315,13 +322,6 @@ class Waiter(object):
         logging.info(f"S DISCONNECT client_id:{self.connect.clientid}")
 
     async def publish_handler(self, packet: Publish) -> Awaitable[None]:
-        if self.state != State.CONNECTED:
-            logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
-            if self.protocol_version == protocol.MQTT50:
-                await self.disconnect(Reason.ProtocolError)
-            self.transport.close()
-            logging.error(f"Connection be closed. reason: ProtocolError")
-            return
         qos = packet.get_qos()
         pid = packet.get_pid()
         topic = packet.topic
@@ -432,13 +432,6 @@ class Waiter(object):
         logging.info(f"S PUBCOMP (m{pid}) {self.connect.clientid}")
 
     async def puback_handler(self, packet: Puback) -> Awaitable[None]:
-        if self.state != State.CONNECTED:
-            logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
-            if self.protocol_version == protocol.MQTT50:
-                await self.disconnect(Reason.ProtocolError)
-            self.transport.close()
-            logging.error(f"Connection be closed. reason: ProtocolError")
-            return
         pid = packet.get_pid()
         clientid = self.connect.clientid
         logging.info(f"R PUBACK (m{pid}) {clientid}")
@@ -449,13 +442,6 @@ class Waiter(object):
         self.app.getSession(clientid).remove_outgoing_inflight_message(pid)
 
     async def pubrec_handler(self, packet: Pubrec) -> Awaitable[None]:
-        if self.state != State.CONNECTED:
-            logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
-            if self.protocol_version == protocol.MQTT50:
-                await self.disconnect(Reason.ProtocolError)
-            self.transport.close()
-            logging.error(f"Connection be closed. reason: ProtocolError")
-            return
         pid = packet.get_pid()
         clientid = self.connect.clientid
         logging.info(f"R PUBREC (m{pid}) {clientid}")
@@ -466,13 +452,6 @@ class Waiter(object):
         await self.pubrel(pid, Reason.Success)
 
     async def pubrel_handler(self, packet: Pubrel) -> Awaitable[None]:
-        if self.state != State.CONNECTED:
-            logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
-            if self.protocol_version == protocol.MQTT50:
-                await self.disconnect(Reason.ProtocolError)
-            self.transport.close()
-            logging.error(f"Connection be closed. reason: ProtocolError")
-            return
         pid = packet.get_pid()
         clientid = self.connect.clientid
         logging.info(f"R PUBREL (m{pid}) {clientid}")
@@ -484,13 +463,6 @@ class Waiter(object):
         await self.pubcomp(pid, Reason.Success)
 
     async def pubcomp_handler(self, packet: Pubcomp) -> Awaitable[None]:
-        if self.state != State.CONNECTED:
-            logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
-            if self.protocol_version == protocol.MQTT50:
-                await self.disconnect(Reason.ProtocolError)
-            self.transport.close()
-            logging.error(f"Connection be closed. reason: ProtocolError")
-            return
         pid = packet.get_pid()
         clientid = self.connect.clientid
         logging.info(f"R PUBCOMP (m{pid}) {clientid}")
@@ -517,13 +489,6 @@ class Waiter(object):
     async def subscribe_handler(self, packet: Subscribe) -> Awaitable[None]:
         clientid = self.connect.clientid
         logging.info(f"R SUBSCRIBE (m{packet.pid}) {clientid}")
-
-        if self.state != State.CONNECTED:
-            logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
-            if self.protocol_version == protocol.MQTT50:
-                await self.disconnect(Reason.ProtocolError)
-            logging.error(f"Connection be closed. reason: ProtocolError")
-            return
         rcodes = list()
         for top in packet.topicOpsList:
             tf = top.topic_filter
@@ -543,12 +508,6 @@ class Waiter(object):
         await self.app.dispatchRetainMessages(packet, clientid)
 
     async def unsubscribe_handler(self, packet: Unsubscribe) -> Awaitable[None]:
-        if self.state != State.CONNECTED:
-            logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
-            if self.protocol_version == protocol.MQTT50:
-                await self.disconnect(Reason.ProtocolError)
-            logging.error(f"Connection be closed. reason: ProtocolError")
-            return
         rcodes = list()
         for tf in packet.topic_filter_list:
             if self.verifyTopicFilter(tf):
@@ -568,19 +527,10 @@ class Waiter(object):
         logging.info(f"S PINGRESP {self.connect.clientid}")
 
     async def pingreq_handler(self, packet: Pingreq) -> Awaitable[None]:
-        if self.state != State.CONNECTED:
-            logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
-            if self.protocol_version == protocol.MQTT50:
-                await self.disconnect(Reason.ProtocolError)
-            logging.error(f"Connection be closed. reason: ProtocolError")
-            return
         logging.info(f"R PINGREQ  {self.connect.clientid}")
         await self.pingresp()
 
     async def disconnect_handler(self, packet: Disconnect) -> Awaitable[None]:
-        if not self.connect:
-            self.transport.close()
-            return
         sei = packet.session_expiry_interval()
         sei0 = self.connect.session_expiry_interval()
         self.disconnect_rcode = packet.rcode
