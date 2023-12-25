@@ -13,10 +13,10 @@ from typing import Tuple, Dict
 from tornado.ioloop import IOLoop
 from tornado import gen
 
-from .config import Config
-from .authplugin import AuthPlugin
-from .common import State, PacketClass, Topic, TopicFilter, PacketID 
-from .common import TopicFilterRegexp, TopicPublishRegexp, SharedTopicRegexp
+from ..server.config import Config
+from ..server.authplugin import AuthPlugin
+from ..server.common import State, PacketClass, Topic, TopicFilter, PacketID 
+from ..server.common import TopicFilterRegexp, TopicPublishRegexp, SharedTopicRegexp
 
 from ..mqttp.packet import Packet
 from ..mqttp.connect import Connect
@@ -49,7 +49,7 @@ KEEP_ALIVE_TIMEOUT = 7
 CLOSED = 8
 FACTOR = 1.5
 
-class MQTTClient(object):
+class Bridge(object):
     def __init__(self, transport, address):
         self.state = State.INITIATED
         self.app = None
@@ -68,22 +68,24 @@ class MQTTClient(object):
         self.send_quota = 0
         self.alias_maximum = 0
 
-        self.alias2topic_map: Dict[int, Topic] = {} # for server side { alias: topic }
-        self.topic2alias_map: Dict[Topic, int] = {} # for client side { topic: alias }
+        self.alias2topic_map: Dict[int, Topic] = {} # for client side { alias: topic }
+        self.topic2alias_map: Dict[Topic, int] = {} # for server side { topic: alias }
         self.disconnect_rcode = Reason.Success
 
         self.handlers = {
-            PacketType.CONNECT:     self.connect_handler,
+#           PacketType.CONNECT:     self.connect_handler,
+            PacketType.CONNACK:     self.connack_handler,
             PacketType.PUBLISH:     self.publish_handler,
             PacketType.PUBACK:      self.puback_handler,
             PacketType.PUBREC:      self.pubrec_handler,
             PacketType.PUBREL:      self.pubrel_handler,
             PacketType.PUBCOMP:     self.pubcomp_handler,
             PacketType.SUBSCRIBE:   self.subscribe_handler,
-         #  PacketType.SUBACK:      self.suback_handler,
+            PacketType.SUBACK:      self.suback_handler,
             PacketType.UNSUBSCRIBE: self.unsubscribe_handler,
-         #  PacketType.UNSUBACK:    self.unsuback_handler,    
-            PacketType.PINGREQ:     self.pingreq_handler,
+            PacketType.UNSUBACK:    self.unsuback_handler,    
+#           PacketType.PINGREQ:     self.pingreq_handler,
+            PacketType.PINGRESP:     self.pingresp_handler,
             PacketType.DISCONNECT:  self.disconnect_handler,
             PacketType.AUTH:        self.auth_handler,
         }
@@ -111,11 +113,6 @@ class MQTTClient(object):
             logging.error(f"Verify topic fail: {topic}")
             return False
         return True
-
-    async def publish_system_info(self) -> Awaitable[None]:
-    	while True:
-            await gen.sleep(PUB_SYS_INFO_INTERVAL)
-            await self.mem_db.update_sys_info_topic()
 
     async def read_pktype_flags(self) -> Awaitable[Tuple[int, int]]:
         buff = await self.transport.read_bytes(1)
@@ -208,7 +205,7 @@ class MQTTClient(object):
             logging.info(f"Connection be closed. Reason: {rcode.name}")
             return
         
-        from .memdb import MemDB
+        from ..server.memdb import MemDB
         self.app = MemDB.instance().getApp(self.appid)
         self.app.connect_max = connect_max
         if self.app.curr_conn_num == connect_max:
@@ -579,9 +576,6 @@ class MQTTClient(object):
         await self.pingresp()
 
     async def disconnect_handler(self, packet: Disconnect) -> Awaitable[None]:
-        if not self.connect:
-            self.transport.close()
-            return
         sei = packet.session_expiry_interval()
         sei0 = self.connect.session_expiry_interval()
         self.disconnect_rcode = packet.rcode
@@ -591,6 +585,7 @@ class MQTTClient(object):
                 await self.disconnect(Reason.ProtocolError)
             logging.error(f"Connection be closed. reason: ProtocolError")
             return
+        
         logging.info(f"R DISCONNECT {self.connect.clientid}")
         session = self.app.getSession(self.connect.clientid)
         if session:
