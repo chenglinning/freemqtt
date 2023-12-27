@@ -147,7 +147,7 @@ class Waiter(object):
             return None
        
         pktype = PacketType(pktype)
-        if self.state != State.CONNECTED and packet.get_type()!=PacketType.CONNECT:
+        if self.state != State.CONNECTED and pktype!=PacketType.CONNECT:
             logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
             return None
         
