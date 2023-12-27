@@ -12,7 +12,6 @@ from io import BytesIO
 from typing import Tuple, Dict
 from tornado.ioloop import IOLoop
 from tornado import gen
-
 from ..server.config import Config
 from ..server.authplugin import AuthPlugin
 from ..server.common import State, PacketClass, Topic, TopicFilter, PacketID 
@@ -39,7 +38,7 @@ from ..mqttp import mask
 from ..mqttp import protocol
 from ..mqttp.pktype import PacketType, QoS
 from ..mqttp.property import Property
-from ..mqttp.reason_code import Reason, validReasoneCode
+from ..mqttp.reason_code import Reason
 from ..transport import TransportClosedError
 
 PUB_SYS_INFO_INTERVAL = 15
@@ -73,19 +72,17 @@ class Bridge(object):
         self.disconnect_rcode = Reason.Success
 
         self.handlers = {
-#           PacketType.CONNECT:     self.connect_handler,
-            PacketType.CONNACK:     self.connack_handler,
+            PacketType.CONNECT:     self.connect_handler,
             PacketType.PUBLISH:     self.publish_handler,
             PacketType.PUBACK:      self.puback_handler,
             PacketType.PUBREC:      self.pubrec_handler,
             PacketType.PUBREL:      self.pubrel_handler,
             PacketType.PUBCOMP:     self.pubcomp_handler,
             PacketType.SUBSCRIBE:   self.subscribe_handler,
-            PacketType.SUBACK:      self.suback_handler,
+         #  PacketType.SUBACK:      self.suback_handler,
             PacketType.UNSUBSCRIBE: self.unsubscribe_handler,
-            PacketType.UNSUBACK:    self.unsuback_handler,    
-#           PacketType.PINGREQ:     self.pingreq_handler,
-            PacketType.PINGRESP:     self.pingresp_handler,
+         #  PacketType.UNSUBACK:    self.unsuback_handler,    
+            PacketType.PINGREQ:     self.pingreq_handler,
             PacketType.DISCONNECT:  self.disconnect_handler,
             PacketType.AUTH:        self.auth_handler,
         }
@@ -113,6 +110,11 @@ class Bridge(object):
             logging.error(f"Verify topic fail: {topic}")
             return False
         return True
+
+    async def publish_system_info(self) -> Awaitable[None]:
+    	while True:
+            await gen.sleep(PUB_SYS_INFO_INTERVAL)
+            await self.mem_db.update_sys_info_topic()
 
     async def read_pktype_flags(self) -> Awaitable[Tuple[int, int]]:
         buff = await self.transport.read_bytes(1)
@@ -186,13 +188,20 @@ class Bridge(object):
                 break
             
     async def handle_packet(self, packet: Packet) -> Awaitable[None]:
-        handler = self.handlers[packet.get_type()]
-        await handler(packet)
+        if self.state == State.CONNECTED or packet.get_type()==PacketType.CONNECT:
+            handler = self.handlers[packet.get_type()]
+            await handler(packet)
+        else:
+            logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
+            logging.error(f"Connection be closed. reason: ProtocolError")
+            if self.protocol_version == protocol.MQTT50:
+                await self.disconnect(Reason.ProtocolError)
+            self.transport.close()
 
     async def connect_handler(self, packet: Connect) -> Awaitable[None]:
         if self.state != State.INITIATED:
-            self.transport.close()            
             logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
+            self.transport.close()            
             return
         self.state = State.CONNECTING
         self.connect = packet
@@ -205,7 +214,7 @@ class Bridge(object):
             logging.info(f"Connection be closed. Reason: {rcode.name}")
             return
         
-        from ..server.memdb import MemDB
+        from .memdb import MemDB
         self.app = MemDB.instance().getApp(self.appid)
         self.app.connect_max = connect_max
         if self.app.curr_conn_num == connect_max:
@@ -313,13 +322,6 @@ class Bridge(object):
         logging.info(f"S DISCONNECT client_id:{self.connect.clientid}")
 
     async def publish_handler(self, packet: Publish) -> Awaitable[None]:
-        if self.state != State.CONNECTED:
-            logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
-            if self.protocol_version == protocol.MQTT50:
-                await self.disconnect(Reason.ProtocolError)
-            self.transport.close()
-            logging.error(f"Connection be closed. reason: ProtocolError")
-            return
         qos = packet.get_qos()
         pid = packet.get_pid()
         topic = packet.topic
@@ -430,13 +432,6 @@ class Bridge(object):
         logging.info(f"S PUBCOMP (m{pid}) {self.connect.clientid}")
 
     async def puback_handler(self, packet: Puback) -> Awaitable[None]:
-        if self.state != State.CONNECTED:
-            logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
-            if self.protocol_version == protocol.MQTT50:
-                await self.disconnect(Reason.ProtocolError)
-            self.transport.close()
-            logging.error(f"Connection be closed. reason: ProtocolError")
-            return
         pid = packet.get_pid()
         clientid = self.connect.clientid
         logging.info(f"R PUBACK (m{pid}) {clientid}")
@@ -447,13 +442,6 @@ class Bridge(object):
         self.app.getSession(clientid).remove_outgoing_inflight_message(pid)
 
     async def pubrec_handler(self, packet: Pubrec) -> Awaitable[None]:
-        if self.state != State.CONNECTED:
-            logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
-            if self.protocol_version == protocol.MQTT50:
-                await self.disconnect(Reason.ProtocolError)
-            self.transport.close()
-            logging.error(f"Connection be closed. reason: ProtocolError")
-            return
         pid = packet.get_pid()
         clientid = self.connect.clientid
         logging.info(f"R PUBREC (m{pid}) {clientid}")
@@ -464,13 +452,6 @@ class Bridge(object):
         await self.pubrel(pid, Reason.Success)
 
     async def pubrel_handler(self, packet: Pubrel) -> Awaitable[None]:
-        if self.state != State.CONNECTED:
-            logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
-            if self.protocol_version == protocol.MQTT50:
-                await self.disconnect(Reason.ProtocolError)
-            self.transport.close()
-            logging.error(f"Connection be closed. reason: ProtocolError")
-            return
         pid = packet.get_pid()
         clientid = self.connect.clientid
         logging.info(f"R PUBREL (m{pid}) {clientid}")
@@ -482,13 +463,6 @@ class Bridge(object):
         await self.pubcomp(pid, Reason.Success)
 
     async def pubcomp_handler(self, packet: Pubcomp) -> Awaitable[None]:
-        if self.state != State.CONNECTED:
-            logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
-            if self.protocol_version == protocol.MQTT50:
-                await self.disconnect(Reason.ProtocolError)
-            self.transport.close()
-            logging.error(f"Connection be closed. reason: ProtocolError")
-            return
         pid = packet.get_pid()
         clientid = self.connect.clientid
         logging.info(f"R PUBCOMP (m{pid}) {clientid}")
@@ -515,13 +489,6 @@ class Bridge(object):
     async def subscribe_handler(self, packet: Subscribe) -> Awaitable[None]:
         clientid = self.connect.clientid
         logging.info(f"R SUBSCRIBE (m{packet.pid}) {clientid}")
-
-        if self.state != State.CONNECTED:
-            logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
-            if self.protocol_version == protocol.MQTT50:
-                await self.disconnect(Reason.ProtocolError)
-            logging.error(f"Connection be closed. reason: ProtocolError")
-            return
         rcodes = list()
         for top in packet.topicOpsList:
             tf = top.topic_filter
@@ -541,12 +508,6 @@ class Bridge(object):
         await self.app.dispatchRetainMessages(packet, clientid)
 
     async def unsubscribe_handler(self, packet: Unsubscribe) -> Awaitable[None]:
-        if self.state != State.CONNECTED:
-            logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
-            if self.protocol_version == protocol.MQTT50:
-                await self.disconnect(Reason.ProtocolError)
-            logging.error(f"Connection be closed. reason: ProtocolError")
-            return
         rcodes = list()
         for tf in packet.topic_filter_list:
             if self.verifyTopicFilter(tf):
@@ -566,12 +527,6 @@ class Bridge(object):
         logging.info(f"S PINGRESP {self.connect.clientid}")
 
     async def pingreq_handler(self, packet: Pingreq) -> Awaitable[None]:
-        if self.state != State.CONNECTED:
-            logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
-            if self.protocol_version == protocol.MQTT50:
-                await self.disconnect(Reason.ProtocolError)
-            logging.error(f"Connection be closed. reason: ProtocolError")
-            return
         logging.info(f"R PINGREQ  {self.connect.clientid}")
         await self.pingresp()
 

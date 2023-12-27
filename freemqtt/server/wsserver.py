@@ -9,7 +9,6 @@ from tornado.websocket import WebSocketHandler
 from tornado.queues import Queue
 from tornado.ioloop import IOLoop
 from ..transport.websocket import WebsocketTranport
-from ..transport.exception import TransportClosedError
 from .waiter import Waiter
 
 class MqttWebsocketHandler(WebSocketHandler):

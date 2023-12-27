@@ -38,7 +38,7 @@ from ..mqttp import mask
 from ..mqttp import protocol
 from ..mqttp.pktype import PacketType, QoS
 from ..mqttp.property import Property
-from ..mqttp.reason_code import Reason, validReasoneCode
+from ..mqttp.reason_code import Reason
 from ..transport import TransportClosedError
 
 PUB_SYS_INFO_INTERVAL = 15
@@ -141,15 +141,16 @@ class Waiter(object):
     async def recv_mqtt_packet(self) -> Awaitable[Packet]:
         # read packet type & flags (fixed header first byte)
         pktype, flags = await self.read_pktype_flags()
-#       logging.info(f"pktype: {pktype} flags: {flags: 02X}")
         self.received_bytes += 1 
         if not pktype in self.handlers:
             logging.error(f"Invalid packet type: {pktype}")
             return None
-        
+       
         pktype = PacketType(pktype)
-        # logging.info(f"{pktype.name} flags:0x{flags:02X}")
-
+        if self.state != State.CONNECTED and packet.get_type()!=PacketType.CONNECT:
+            logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
+            return None
+        
         # read remaining lenght
         remain_len = await self.read_remaining_length()
         if remain_len is None:
@@ -188,15 +189,8 @@ class Waiter(object):
                 break
             
     async def handle_packet(self, packet: Packet) -> Awaitable[None]:
-        if self.state == State.CONNECTED or packet.get_type()==PacketType.CONNECT:
-            handler = self.handlers[packet.get_type()]
-            await handler(packet)
-        else:
-            logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
-            logging.error(f"Connection be closed. reason: ProtocolError")
-            if self.protocol_version == protocol.MQTT50:
-                await self.disconnect(Reason.ProtocolError)
-            self.transport.close()
+        handler = self.handlers[packet.get_type()]
+        await handler(packet)
 
     async def connect_handler(self, packet: Connect) -> Awaitable[None]:
         if self.state != State.INITIATED:
