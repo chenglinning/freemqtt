@@ -70,10 +70,9 @@ def read_string(r: io.BytesIO) -> str:
         return ""
     try:
         utf8str = r.read(rlen)
-        logging.debug(f'utf8str: {utf8str}')
         v = utf8str.decode("utf8")
         if not BasicUTFRegexp.match(v):
-            logging.error("Invalid UTF8 string.")
+            logging.error(f"Invalid UTF8 string: {utf8str}")
             v = None
     except Exception as e:
         logging.exception(repr(e))
