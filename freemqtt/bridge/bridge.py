@@ -52,7 +52,7 @@ class Bridge(object):
     def __init__(self, transport, address):
         self.state = State.INITIATED
         self.app = None
-        self.connect = None
+        self.connack = None
         self.protocol_version = protocol.MQTT311
 
         self.keep_alive = 60
@@ -72,16 +72,16 @@ class Bridge(object):
         self.disconnect_rcode = Reason.Success
 
         self.handlers = {
-            PacketType.CONNECT:     self.connect_handler,
+            PacketType.CONNACK:     self.connack_handler,
             PacketType.PUBLISH:     self.publish_handler,
             PacketType.PUBACK:      self.puback_handler,
             PacketType.PUBREC:      self.pubrec_handler,
             PacketType.PUBREL:      self.pubrel_handler,
             PacketType.PUBCOMP:     self.pubcomp_handler,
             PacketType.SUBSCRIBE:   self.subscribe_handler,
-         #  PacketType.SUBACK:      self.suback_handler,
+            PacketType.SUBACK:      self.suback_handler,
             PacketType.UNSUBSCRIBE: self.unsubscribe_handler,
-         #  PacketType.UNSUBACK:    self.unsuback_handler,    
+            PacketType.UNSUBACK:    self.unsuback_handler,    
             PacketType.PINGREQ:     self.pingreq_handler,
             PacketType.DISCONNECT:  self.disconnect_handler,
             PacketType.AUTH:        self.auth_handler,
@@ -148,7 +148,9 @@ class Bridge(object):
             return None
         
         pktype = PacketType(pktype)
-        # logging.info(f"{pktype.name} flags:0x{flags:02X}")
+        if self.state != State.CONNECTED and pktype!=PacketType.CONNECT:
+            logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
+            return None
 
         # read remaining lenght
         remain_len = await self.read_remaining_length()
@@ -188,23 +190,16 @@ class Bridge(object):
                 break
             
     async def handle_packet(self, packet: Packet) -> Awaitable[None]:
-        if self.state == State.CONNECTED or packet.get_type()==PacketType.CONNECT:
-            handler = self.handlers[packet.get_type()]
-            await handler(packet)
-        else:
-            logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
-            logging.error(f"Connection be closed. reason: ProtocolError")
-            if self.protocol_version == protocol.MQTT50:
-                await self.disconnect(Reason.ProtocolError)
-            self.transport.close()
+        handler = self.handlers[packet.get_type()]
+        await handler(packet)
 
-    async def connect_handler(self, packet: Connect) -> Awaitable[None]:
+    async def connack_handler(self, packet: Connect) -> Awaitable[None]:
         if self.state != State.INITIATED:
             logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
             self.transport.close()            
             return
         self.state = State.CONNECTING
-        self.connect = packet
+        self.connack = packet
         self.protocol_version = packet.get_version()
         self.appid, connect_max =  self.auth_plugin.auth_token(packet.password)
         if not self.appid:
@@ -214,7 +209,7 @@ class Bridge(object):
             logging.info(f"Connection be closed. Reason: {rcode.name}")
             return
         
-        from .memdb import MemDB
+        from ..server.memdb import MemDB
         self.app = MemDB.instance().getApp(self.appid)
         self.app.connect_max = connect_max
         if self.app.curr_conn_num == connect_max:
@@ -262,8 +257,8 @@ class Bridge(object):
             await self.app.getSession(packet.clientid).resume()
         return
 
-    async def connack(self, ack_flags: int, rcode: Reason) -> Awaitable[None]:
-        packet = Connack(self.protocol_version)
+    async def connect(self, ack_flags: int, rcode: Reason) -> Awaitable[None]:
+        packet = Connect(self.protocol_version)
         if self.protocol_version == protocol.MQTT50 and rcode==Reason.Success:
             # Session Expiry Interval
             sei = self.connect.propset.get(Property.Session_Expiry_Interval)
@@ -308,7 +303,7 @@ class Bridge(object):
         
         data = packet.full_pack()
         await self.transport.write(data)
-        logging.info(f"S CONNACK {self.connect.clientid}")
+        logging.info(f"S CONNECT {self.connect.clientid}")
 
     async def disconnect(self, rcode: Reason) -> Awaitable[None]:
         packet = Disconnect(self.protocol_version)
