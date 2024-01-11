@@ -201,7 +201,8 @@ class MqttApp(object):
             if top.existing and top.RH()==1:
                 continue
             suboption = SubOption(options=top.options, subid=top.sub_id)
-            tpset = self.tf_retain_topics.get(top.topic_filter, set())
+            tpset0 = self.tf_retain_topics.get(top.topic_filter, set())
+            tpset = copy(tpset0)
             for topic in tpset:
                 message = self.retain_msg.get(topic, None)
                 if message:

@@ -381,10 +381,10 @@ class Waiter(object):
         if retain :
             if payload:
                 self.app.storeRetainMsg(packet)
+                await self.app.dispatch(packet)
             else:
                 self.app.removeRetainMsg(packet)
-
-        if payload:
+        else:
             await self.app.dispatch(packet)
 
     async def puback(self, pid: PacketID, rcode: Reason) -> Awaitable[None]:

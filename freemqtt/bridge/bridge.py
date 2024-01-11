@@ -53,10 +53,8 @@ class Bridge(object):
         self.state = State.INITIATED
         self.app = None
         self.connack = None
-        self.protocol_version = protocol.MQTT311
-
-        self.keep_alive = 60
-        self.auth_plugin = AuthPlugin()
+        self.protocol_version = protocol.MQTT50
+        self.keep_alive = 20
         self.appid = None
         self.appname = None
         self.last_timestamp = time.time()
@@ -382,10 +380,10 @@ class Bridge(object):
         if retain :
             if payload:
                 self.app.storeRetainMsg(packet)
+                await self.app.dispatch(packet)
             else:
                 self.app.removeRetainMsg(packet)
-
-        if payload:
+        else:
             await self.app.dispatch(packet)
 
     async def puback(self, pid: PacketID, rcode: Reason) -> Awaitable[None]:

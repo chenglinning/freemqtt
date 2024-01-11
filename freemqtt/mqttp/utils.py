@@ -82,7 +82,7 @@ def read_string(r: io.BytesIO) -> str:
 def write_string(w: io.BytesIO, v: str) -> int:
     rlen = -1
     if not BasicUTFRegexp.match(v):
-        logging.error("Invalid UTF8 string.")
+        logging.error(f"Invalid UTF8 string: {v}")
         return -1
     try:
         utf8s = v.encode("utf-8")

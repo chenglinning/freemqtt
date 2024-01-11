@@ -4,9 +4,11 @@
 #       http://www.apache.org/licenses/LICENSE-2.0
 #
 import os
+import sys
 import logging
 import ssl
 import asyncio
+import signal
 
 import tornado.options
 import tornado.autoreload
@@ -35,6 +37,20 @@ tornado.options.define("ws_port", default=8083, help="Run FreeMQTT Server over w
 tornado.options.define("propagate", default=False, help="disable propagate", type=bool)
 tornado.options.define("mqtt_via_ssl", default=False, help="enable ssl", type=bool )  
 
+tcp_server = None
+ws_server = None
+
+def sig_handler(signum, frame):
+    logging.info(f'Signal handler called with signal: {signum}')
+    if tcp_server:
+        tcp_server.stop()
+    if ws_server:
+        ws_server.stop()
+    sys.exit(1)
+
+signal.signal(signal.SIGINT, sig_handler)
+#signal.signal(signal.SIGTERM, shandler)
+
 async def main():
     tornado.options.parse_command_line()
     tornado.autoreload.start()
@@ -50,16 +66,16 @@ async def main():
         server = MQTTServer(ssl_options=ssl_ctx)
         mqtt_port = tornado.options.options.ssl_port
     else:
-        server = MQTTServer( ssl_options=None )
+        tcp_server = MQTTServer( ssl_options=None )
         mqtt_port = tornado.options.options.port
-    server.listen(mqtt_port, address="127.0.0.1")
+    tcp_server.listen(mqtt_port, address="127.0.0.1")
 
     """
     MQTT over Websocket Server
     """
     app = make_app()
-    http_server = tornado.httpserver.HTTPServer(app, xheaders=True)
-    http_server.listen(tornado.options.options.ws_port, address="127.0.0.1")
+    ws_server = tornado.httpserver.HTTPServer(app, xheaders=True)
+    ws_server.listen(tornado.options.options.ws_port, address="127.0.0.1")
 
     await asyncio.Event().wait()
 
