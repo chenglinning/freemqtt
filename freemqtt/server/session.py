@@ -154,8 +154,9 @@ class MQTTSession(object):
         packet3.set_topic(topic) # restore topic (not "")
         self.add_outgoing_inflight_message(packet3)
 
-        if self.waiter.state==State.CONNECTED:
+        if self.waiter.state==State.CONNECTED and self.waiter.send_quota:
             data = packet2.full_pack()
+            self.waiter.send_quota -= 1
             await self.waiter.transport.write(data)
             logging.info(f"S PUBLISH {topic} (d{dup} q{qos} r{retain} m{pid}) {clientid} level({packet2.get_version()})")
             return True

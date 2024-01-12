@@ -1,9 +1,11 @@
+import uuid
 from base64 import b64encode, b64decode
 from freemqtt.server.tokentools import signToken, verifyToken
-appid = '68ed2da2'
-appname = 'demo'
+appid = uuid.uuid1().hex[0:8]
+#appname = 'demo'
+appname = '家悦'
 if __name__ == "__main__":
-    app = f'{appname}@{appid}'
+    app = f'{appid}@{appname}'
     token = signToken(app)
     data = verifyToken(token)
     print ("******************************")

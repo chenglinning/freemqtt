@@ -6,7 +6,7 @@
 class Config:
     session_expiry_interval = 7200 # in second
     message_expiry_interval = 7200 # in second
-    receive_maximum = 512
+    receive_maximum = 64
     maximum_packet_size = 2097152 # 2*1024*1024 = 2M bytes
     maximum_qos = 2
     retain_available = True

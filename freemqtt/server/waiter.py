@@ -433,6 +433,7 @@ class Waiter(object):
             await self.disconnect(Reason.ProtocolError)
             logging.error("Not expected PUBACK packet")
             return
+        self.send_quota += 1
         self.app.getSession(clientid).remove_outgoing_inflight_message(pid)
 
     async def pubrec_handler(self, packet: Pubrec) -> Awaitable[None]:
@@ -454,6 +455,7 @@ class Waiter(object):
             logging.error("Not expected PUBREL packet")
             return
         self.app.getSession(clientid).remove_incoming_inflight_message(pid)
+        self.receive_quota += 1
         await self.pubcomp(pid, Reason.Success)
 
     async def pubcomp_handler(self, packet: Pubcomp) -> Awaitable[None]:
@@ -464,6 +466,7 @@ class Waiter(object):
             await self.disconnect(Reason.ProtocolError)
             logging.error("Not expected PUBREC packet")
             return
+        self.send_quota += 1
         self.app.getSession(clientid).remove_outgoing_inflight_message(pid)
 
     async def suback(self, pid: PacketID, rcodes: List[Reason]) -> Awaitable[None]:
