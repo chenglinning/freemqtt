@@ -9,7 +9,7 @@ from ..mqttp.publish import Publish
 from ..mqttp.pktype import QoS
 from ..mqttp.property import Property
 from ..mqttp import protocol
-
+from ..mqttp.reason_code import Reason
 from .waiter import Waiter
 from .common import State, SubOption, PacketID, ClientID, AppID, Topic, TopicFilter
 class MQTTSession(object):
@@ -152,16 +152,26 @@ class MQTTSession(object):
         
         packet3 = copy.deepcopy(packet2)
         packet3.set_topic(topic) # restore topic (not "")
+        data = packet2.full_pack()
+        maxpsize = self.waiter.connect.maximum_packet_size()
+        psize = len(data)
+        if psize > maxpsize:
+            logging.error(f"{Reason.PacketTooLarge.name}. Packet size: {psize}")
+            return False
+        
         self.add_outgoing_inflight_message(packet3)
 
-        if self.waiter.state==State.CONNECTED and self.waiter.send_quota:
-            data = packet2.full_pack()
-            self.waiter.send_quota -= 1
-            await self.waiter.transport.write(data)
-            logging.info(f"S PUBLISH {topic} (d{dup} q{qos} r{retain} m{pid}) {clientid} level({packet2.get_version()})")
-            return True
+        if self.waiter.state==State.CONNECTED:
+            if self.waiter.send_quota:
+                self.waiter.send_quota -= 1
+                await self.waiter.transport.write(data)
+                logging.info(f"S PUBLISH {topic} (d{dup} q{qos} r{retain} m{pid}) {clientid} level({packet2.get_version()})")
+                return True
+            else:
+                logging.warning(f"Send quota is 0 for {clientid} level({packet2.get_version()})")
         else:
             logging.info(f"Q PUBLISH {topic} (d{dup} q{qos} r{retain} m{pid}) {clientid} level({packet2.get_version()})")
+
         return False
 
     async def resume(self) -> bool:

@@ -38,6 +38,10 @@ class Connect(Packet):
         rm = self.propset.get(Property.Receive_Maximum)
         return  1024 if rm==None else rm
     
+    def maximum_packet_size(self) -> int:
+        mx = self.propset.get(Property.Maximum_Packet_Size)
+        return 2097152 if mx==None else mx # default 2M bytes
+    
     def session_expiry_interval(self) -> int:
         sei = self.propset.get(Property.Session_Expiry_Interval)
         return  sei if sei else 0

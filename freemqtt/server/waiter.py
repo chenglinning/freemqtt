@@ -40,6 +40,7 @@ from ..mqttp.pktype import PacketType, QoS
 from ..mqttp.property import Property
 from ..mqttp.reason_code import Reason
 from ..transport import TransportClosedError
+from ..mqttp import utils
 
 PUB_SYS_INFO_INTERVAL = 15
 INIT_INTERVAL = 10
@@ -155,6 +156,12 @@ class Waiter(object):
         remain_len = await self.read_remaining_length()
         if remain_len is None:
             logging.error("Invalid remaining length")
+            return None
+        
+        vhsize = utils.vlen(remain_len)
+        packet_size = 1 + vhsize + remain_len
+        if packet_size > Config.maximum_packet_size:
+            logging.error(f"{Reason.PacketTooLarge.name}. Packet size: {packet_size}")
             return None
         
         # read remaining data    
