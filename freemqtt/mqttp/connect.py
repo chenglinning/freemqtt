@@ -40,7 +40,7 @@ class Connect(Packet):
     
     def maximum_packet_size(self) -> int:
         mx = self.propset.get(Property.Maximum_Packet_Size)
-        return 2097152 if mx==None else mx # default 2M bytes
+        return mx if mx else 2097152 # default 2M bytes
     
     def session_expiry_interval(self) -> int:
         sei = self.propset.get(Property.Session_Expiry_Interval)

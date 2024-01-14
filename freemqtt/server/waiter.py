@@ -528,10 +528,10 @@ class Waiter(object):
         packet = Pingresp(self.protocol_version)
         data = packet.full_pack()
         await self.transport.write(data)
-        logging.info(f"S PINGRESP {self.connect.clientid}")
+        logging.debug(f"S PINGRESP {self.connect.clientid}")
 
     async def pingreq_handler(self, packet: Pingreq) -> Awaitable[None]:
-        logging.info(f"R PINGREQ  {self.connect.clientid}")
+        logging.debug(f"R PINGREQ  {self.connect.clientid}")
         await self.pingresp()
 
     async def disconnect_handler(self, packet: Disconnect) -> Awaitable[None]:
