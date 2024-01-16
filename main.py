@@ -55,8 +55,8 @@ async def main():
     tornado.options.parse_command_line()
     tornado.autoreload.start()
 #   logging.basicConfig(level=logging.ERROR)
-#   logging.getLogger().setLevel(level=logging.DEBUG)
-    logging.getLogger().setLevel(level=logging.INFO)
+    logging.getLogger().setLevel(level=logging.DEBUG)
+#   logging.getLogger().setLevel(level=logging.INFO)
     logging.info("FreeMQTT Server 1.0 started")
         
     if tornado.options.options.mqtt_via_ssl:

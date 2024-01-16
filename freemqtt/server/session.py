@@ -156,10 +156,10 @@ class MQTTSession(object):
         maxpsize = self.waiter.connect.maximum_packet_size()
         psize = len(data)
         if psize > maxpsize:
-            logging.error(f"{Reason.PacketTooLarge.name}. Packet size: {psize} {clientid}")
+            logging.error(f"{Reason.PacketTooLarge.name}. Packet size: {psize} > {maxpsize} {clientid}")
             return False
         self.add_outgoing_inflight_message(packet3)
-        
+
         if self.waiter.state==State.CONNECTED:
             if self.waiter.send_quota:
                 self.waiter.send_quota -= 1

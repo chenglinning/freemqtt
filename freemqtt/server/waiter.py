@@ -161,7 +161,7 @@ class Waiter(object):
         vhsize = utils.vlen(remain_len)
         packet_size = 1 + vhsize + remain_len
         if packet_size > Config.maximum_packet_size:
-            logging.error(f"{Reason.PacketTooLarge.name}. Packet size: {packet_size}")
+            logging.error(f"{Reason.PacketTooLarge.name}. Packet size: {packet_size} > {Config.maximum_packet_size}")
             return None
         
         # read remaining data    
@@ -340,14 +340,6 @@ class Waiter(object):
             logging.error("Connection be closed. Reason: d{dup} q{qos}")
             return
         
-        if not self.verifyTopic(topic):
-            if self.protocol_version == protocol.MQTT50:
-                await self.disconnect(Reason.InvalidTopicName)
-            else:
-                self.state = State.DISCONNECTED_BY_SERVER
-            self.transport.close()
-            logging.error("Connection be closed. Reason: InvalidTopicName")
-            return
 
         # handle topic alias
         if self.protocol_version==protocol.MQTT50:
@@ -367,6 +359,15 @@ class Waiter(object):
                     logging.error(f"Protocol error topic alias:{alias} not in map")
                     await self.disconnect(Reason.ProtocolError)
                     return
+                
+        if not self.verifyTopic(topic):
+            if self.protocol_version == protocol.MQTT50:
+                await self.disconnect(Reason.InvalidTopicName)
+            else:
+                self.state = State.DISCONNECTED_BY_SERVER
+            self.transport.close()
+            logging.error("Connection be closed. Reason: InvalidTopicName")
+            return
                 
         rcode = Reason.Success
         if qos > 0 and not dup:
