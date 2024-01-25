@@ -1,16 +1,16 @@
+import uuid
 from base64 import b64encode, b64decode
-from freemqtt.server.tokentools import signToken2, verifyToken2
-appid = '80abcdfe'
-appname='MqttBridge'
+from freemqtt.server.tokentools import signToken, verifyToken
+appid = 'bridge'
+appname = 'mqtt'
 if __name__ == "__main__":
-    token = signToken2(appid, appname)
-    data = verifyToken2(token)
+    app = f'{appid}@{appname}'
+    token = signToken(app)
+    data = verifyToken(token)
     print ("******************************")
     print (token)
     print (data)
+    print ("===============================")
 
-# for guojie_app 
-# hx5hMRJ8z+5guo7qh6RNZPsw3quEOT+n50lyGCZg09A=
-        
-# demo
-# wNMAP5SRt53QkEf47mLrbBVDqcRtiuHlLAUMQxSPG1E=
+# bridge@mqtt    
+# tCWqBflYm7Rovt9W+J+oGnATU921Fh1fzoG1qxK/j0M=

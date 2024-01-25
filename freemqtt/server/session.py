@@ -3,7 +3,7 @@
 # All rights reserved
 #
 import logging, copy, time
-from typing import Dict, Set
+from typing import Dict, Set, Union
 from ..mqttp.packet import Packet, PacketType
 from ..mqttp.publish import Publish
 from ..mqttp.pktype import QoS
@@ -11,9 +11,10 @@ from ..mqttp.property import Property
 from ..mqttp import protocol
 from ..mqttp.reason_code import Reason
 from .waiter import Waiter
+from .bridge import Bridge
 from .common import State, SubOption, PacketID, ClientID, AppID, Topic, TopicFilter
 class MQTTSession(object):
-    def __init__(self, waiter: Waiter) -> None:
+    def __init__(self, waiter: Union[Waiter, Bridge]) -> None:
         self.waiter = waiter
         self.topicFilterSet : Set[TopicFilter] = set()
 

@@ -5,17 +5,17 @@
 #
 import time
 import logging
-import struct
+import struct, uuid
 from typing import Awaitable, List
 
 from io import BytesIO
 from typing import Tuple, Dict
 from tornado.ioloop import IOLoop
 from tornado import gen
-from ..server.config import Config
-from ..server.authplugin import AuthPlugin
-from ..server.common import State, PacketClass, Topic, TopicFilter, PacketID 
-from ..server.common import TopicFilterRegexp, TopicPublishRegexp, SharedTopicRegexp
+from .config import Config
+from .authplugin import AuthPlugin
+from .common import State, PacketClass, Topic, TopicFilter, PacketID 
+from .common import TopicFilterRegexp, TopicPublishRegexp, SharedTopicRegexp
 
 from ..mqttp.packet import Packet
 from ..mqttp.connect import Connect
@@ -52,11 +52,14 @@ class Bridge(object):
     def __init__(self, transport, address):
         self.state = State.INITIATED
         self.app = None
-        self.connack = None
+        self.nodeid = f'{uuid.uuid1().hex[0:8]}@node'
+        self.connect = None
         self.protocol_version = protocol.MQTT50
         self.keep_alive = 20
-        self.appid = None
-        self.appname = None
+        self.appid = "bridge@mqtt"
+        self.appname = "bridge@mqtt"
+        self.token = "tCWqBflYm7Rovt9W+J+oGnATU921Fh1fzoG1qxK/j0M="
+
         self.last_timestamp = time.time()
         self.transport = transport
         self.remote_ip = address
@@ -84,35 +87,6 @@ class Bridge(object):
             PacketType.DISCONNECT:  self.disconnect_handler,
             PacketType.AUTH:        self.auth_handler,
         }
-
-    def verifyTopicFilter(self, tf: TopicFilter) -> bool:
-        if len(tf)==0:
-            return False
-        splited_topic =  tf.split('/')
-        if len(splited_topic) > 4:
-            logging.error(f"Level of topic filter > 4: {tf}")
-            return False
-        if not TopicFilterRegexp.match(tf):
-            logging.error(f"Verify topic filter fail: {tf}")
-            return False
-        return True
-
-    def verifyTopic(self, topic: Topic) -> bool:
-        if len(topic)==0:
-            return False
-        splited_topic =  topic.split('/')
-        if len(splited_topic) > 4:
-            logging.error(f"Level of topic > 4: {topic}")
-            return False
-        if not TopicPublishRegexp.match(topic):
-            logging.error(f"Verify topic fail: {topic}")
-            return False
-        return True
-
-    async def publish_system_info(self) -> Awaitable[None]:
-    	while True:
-            await gen.sleep(PUB_SYS_INFO_INTERVAL)
-            await self.mem_db.update_sys_info_topic()
 
     async def read_pktype_flags(self) -> Awaitable[Tuple[int, int]]:
         buff = await self.transport.read_bytes(1)
@@ -191,114 +165,36 @@ class Bridge(object):
         handler = self.handlers[packet.get_type()]
         await handler(packet)
 
-    async def connack_handler(self, packet: Connect) -> Awaitable[None]:
-        if self.state != State.INITIATED:
+    async def connack_handler(self, packet: Connack) -> Awaitable[None]:
+        if self.state != State.CONNECTING:
             logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
             self.transport.close()            
             return
-        self.state = State.CONNECTING
-        self.connack = packet
-        self.protocol_version = packet.get_version()
-        self.appid, connect_max =  self.auth_plugin.auth_token(packet.password)
-        if not self.appid:
-            rcode = Reason.RefusedBadUsernameOrPassword
-            await self.connack(0x00, rcode)
-            self.transport.close()
-            logging.info(f"Connection be closed. Reason: {rcode.name}")
+        ver = packet.get_version()
+        if ver != protocol.MQTT50:
+            logging.error(f"Error MQTT version:{ver}  remote ip:{self.remote_ip}")
+            self.transport.close()            
             return
-        
-        from ..server.memdb import MemDB
+        rcode = packet.reason_code()
+        if rcode != Reason.Success:
+            logging.error(f"Error ConnAck Reason: {rcode.name}  remote ip:{self.remote_ip}")
+            self.transport.close()            
+            return
+        from .memdb import MemDB
         self.app = MemDB.instance().getApp(self.appid)
-        self.app.connect_max = connect_max
-        if self.app.curr_conn_num == connect_max:
-            rcode = Reason.QuotaExceeded
-            await self.connack(0x00, rcode)
-            self.transport.close()
-            logging.info(f"Connection be closed. Reason: {rcode.name}")
-
-        ack_flags = 0x00
-        need_resume = False
-        if self.app.sessionPresent(packet.clientid):
-            session = self.app.getSession(packet.clientid)
-            waiter = session.waiter
-            logging.info(f"session is present: {packet.clientid} state: {waiter.state.name}")
-            if waiter.state==State.CONNECTED:
-                waiter.state = State.KICKOUT
-                need_resume = False
-                await waiter.disconnect(Reason.SessionTakenOver)
-                waiter.transport.close()
-                logging.info(f"KICKOUT: clientid: {packet.clientid} ip: {waiter.remote_ip}")
-            else:
-                need_resume = True
-
-            if self.connect.clean_start:
-                need_resume = False
-                self.app.addSession(packet.clientid, self)
-            else:
-                session.waiter = self
-                ack_flags = 0x01
-        else:
-            logging.info(f"session is not present: {packet.clientid}")
-            self.app.addSession(packet.clientid, self)
-
-        self.receive_quota = Config.receive_maximum # give by server
-        self.send_quota = packet.receive_maximum()  # give by client
-        alias_maximun = packet.propset.get(Property.Topic_Alias_Maximum)
-        self.alias_maximum = alias_maximun if alias_maximun else Config.topic_alias_maximum
-        self.keep_alive = packet.keep_alive if packet.keep_alive>0 else Config.server_keep_alive
-        IOLoop.current().spawn_callback(self.keep_alive_timeout)
-
-        logging.info(f"R CONNECT clean_start({int(packet.clean_start)}) keep_alive_interval({packet.keep_alive}) level({self.protocol_version}) {packet.clientid}")
-        await self.connack(ack_flags, Reason.Success)
+        logging.info(f"R CONNACK {packet.clientid}")
         self.state = State.CONNECTED
-        if need_resume:
-            await self.app.getSession(packet.clientid).resume()
         return
 
     async def connect(self, ack_flags: int, rcode: Reason) -> Awaitable[None]:
-        packet = Connect(self.protocol_version)
-        if self.protocol_version == protocol.MQTT50 and rcode==Reason.Success:
-            # Session Expiry Interval
-            sei = self.connect.propset.get(Property.Session_Expiry_Interval)
-            if not sei:
-                sei = Config.session_expiry_interval
-            packet.set_session_expiry_interval(sei)
-            # Receive Maximum
-            packet.set_receive_maximum(Config.receive_maximum)
-            # Maximum QoS
-            packet.set_maximum_qos(Config.maximum_qos)
-            # Retain Available
-            packet.set_retain_available(Config.retain_available)
-            # Maximum Packet Size
-            packet.set_maximum_packet_size(Config.maximum_packet_size)
-            # Assigned Client Identifier
-            if self.connect.assigned_id:
-                packet.set_assiged_client_identifier(self.connect.clientid)
-            # Topic Alias Maximum
-            packet.set_topic_alias_maximum(Config.topic_alias_maximum)
-            # Reason String
-            packet.set_reason_string(rcode.name)
-
-            # Wildcard Subscription Available
-            packet.set_wildcard_subscription_available(Config.wildcard_subscription_available)
-            # Subscription Identifiers Available
-            packet.set_subscription_identifiers_available(Config.subscription_identifiers_available)
-            # Shared Subscription Available
-            packet.set_shared_subscription_available(Config.shared_subscription_available)
-            # Server Keep Alive
-            packet.set_server_keep_alive(self.keep_alive)
-            # Response Information
-            if self.connect.request_response_information():
-                packet.set_response_information(Config.response_information)
-
-            """ No implement below """
-            # Server Reference
-            # Authentication Method
-            # Authentication Data
-
-        packet.set_ack_flags(ack_flags)
-        packet.set_reason_code(rcode)
-        
+        self.state = State.CONNECTING
+        packet = Connect(protocol.MQTT50)
+        packet.set_username("bridge@mqtt")
+        packet.set_password(self.token)
+        packet.set_clientId(self.nodeid)
+        packet.set_keep_alive(20)
+        packet.set_clean_start(False)
+        self.connect = packet
         data = packet.full_pack()
         await self.transport.write(data)
         logging.info(f"S CONNECT {self.connect.clientid}")

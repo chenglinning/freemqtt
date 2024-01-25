@@ -6,9 +6,10 @@ from tornado.ioloop import IOLoop
 from ..mqttp.publish import Publish
 from ..mqttp.subscribe import Subscribe, TopicOptPair
 from ..mqttp.packet import Packet
-from .waiter import Waiter as Waiter2
+from .bridge import Bridge
+from .waiter import Waiter
 from .session import MQTTSession
-from .common import State, SubOption, ClientID, AppID, Topic, TopicFilter, SharedTopicRegexp, ShareName
+from .common import State, SubOption, ClientID, AppID, Topic, TopicFilter, SharedTopicRegexp, ShareName, NodeID
 class MqttApp(object):
     def __init__(self, appid: AppID, appname: str="freemqtt") -> None:
         # mqtt application id & name
@@ -93,7 +94,7 @@ class MqttApp(object):
     def getSession(self,clientid: ClientID) -> MQTTSession:
         return self.ssdb.get(clientid)
     
-    def getWaiter(self, clientid: ClientID) -> Waiter2:
+    def getWaiter(self, clientid: ClientID) -> Waiter:
         if clientid in self.ssdb:
             waiter = self.ssdb.get(clientid).waiter
         else:
@@ -128,7 +129,7 @@ class MqttApp(object):
     def sessionPresent(self, clientid: ClientID) -> bool:
         return clientid in self.ssdb
     
-    def addSession(self, clientid: ClientID, waiter: Waiter2) -> None:
+    def addSession(self, clientid: ClientID, waiter: Waiter) -> None:
         oldsession = self.ssdb.pop(clientid, None)
         if oldsession:
             for tf in oldsession.topicFilterSet:
@@ -233,6 +234,7 @@ class MqttApp(object):
 class MemDB(object):
     def __init__(self):
         self.apps: Dict[AppID, MqttApp] = {}
+        self.nodes: Dict[NodeID, Bridge] = {}
 
     @staticmethod
     def instance():

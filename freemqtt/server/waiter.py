@@ -339,8 +339,6 @@ class Waiter(object):
             self.transport.close()
             logging.error("Connection be closed. Reason: d{dup} q{qos}")
             return
-        
-
         # handle topic alias
         if self.protocol_version==protocol.MQTT50:
             packet.propset.delete(Property.Subscription_Identifier)

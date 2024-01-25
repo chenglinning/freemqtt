@@ -33,6 +33,7 @@ TopicAlias = NewType("TopicAlias", int)
 ClientID = NewType("ClientID", str)
 AppID = NewType("ApplicationID", str)
 ShareName = NewType("ShareName", str)
+NodeID = NewType("NodeID", str)
 
 TopicFilterRegexp = re.compile(r'^[^/](([^+#]*|\+)(/([^+#]*|\+))*(/#)?|#)$')
 TopicPublishRegexp = re.compile(r'^[^/][^#+]*$')
