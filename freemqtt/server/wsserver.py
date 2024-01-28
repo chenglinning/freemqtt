@@ -16,7 +16,9 @@ class MqttWebsocketHandler(WebSocketHandler):
     async def open(self) -> Optional[Awaitable[None]]:
         logging.info("WebSocket opened")
         logging.info("headers: {}".format(self.request.headers))
-        self.remote_ip = self.request.remote_ip
+        remote_ip = self.request.headers.get("X-Real-IP")
+        forward_ip = self.request.headers.get("X-Forwarded-For")
+        self.remote_ip = remote_ip
         logging.info(f"req_uri: {self.request.uri} remote_ip: {self.remote_ip}")
         self.queue = Queue()
         transport = WebsocketTranport(self)
