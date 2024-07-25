@@ -1,0 +1,45 @@
+[freemqtt]
+
+[freemqtt.tcp]
+address = "localhost"
+port = 1883
+
+[freemqtt.ssl]
+address = "0.0.0.0"
+port = 8883
+ssl_certificate = "./ssl/freemqtt.net.crt"
+ssl_certificate_key = "./ssl/freemqtt.net.key"
+
+[freemqtt.ws]
+address = "localhost"
+port = 8083
+
+[freemqtt.wss]
+address = "0.0.0.0"
+port = 8283
+ssl_certificate = "./ssl/freemqtt.net.crt"
+ssl_certificate_key = "./ssl/freemqtt.net.key"
+
+[freemqtt.log]
+path = "log/freemqtt.log"
+maxim_size = 10485760 # 10M
+log_level = "debug"
+
+[freemqtt.properties]
+    session_expiry_interval = 7200 # in second
+    message_expiry_interval = 7200 # in second
+    receive_maximum = 64
+    maximum_packet_size = 2097152 # 2*1024*1024 = 2M bytes
+    maximum_qos = 2
+    retain_available = true
+    topic_alias_maximum = 64
+    wildcard_subscription_available = true
+    subscription_identifiers_available = true
+    shared_subscription_available = true
+    server_keep_alive = 60 # in second
+    response_information = "Welcome to FreeMQTT Broker."
+    maximun_connection = 32
+
+[freemqtt.monitor]
+address = "localhost"
+port = 9080

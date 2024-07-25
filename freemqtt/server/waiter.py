@@ -235,7 +235,7 @@ class Waiter(object):
                 need_resume = False
                 await waiter.disconnect(Reason.SessionTakenOver)
                 waiter.transport.close()
-                logging.info(f"KICKOUT: clientid: {packet.clientid} ip: {waiter.remote_ip}")
+                logging.info(f"KICKOUT: cid: {packet.clientid} ip: {waiter.remote_ip}")
             else:
                 need_resume = True
 
@@ -309,7 +309,7 @@ class Waiter(object):
         
         data = packet.full_pack()
         await self.transport.write(data)
-        logging.info(f"S CONNACK {self.connect.clientid}")
+        logging.info(f"S CONNACK cid:{self.connect.clientid} app:{self.appid}")
 
     async def disconnect(self, rcode: Reason) -> Awaitable[None]:
         packet = Disconnect(self.protocol_version)
@@ -320,7 +320,7 @@ class Waiter(object):
             await self.transport.write(data)
         self.state = State.DISCONNECTED_BY_SERVER
         self.transport.close()
-        logging.info(f"S DISCONNECT client_id:{self.connect.clientid}")
+        logging.info(f"S DISCONNECT cid:{self.connect.clientid} app:{self.appid}")
 
     async def publish_handler(self, packet: Publish) -> Awaitable[None]:
         qos = packet.get_qos()
@@ -329,7 +329,7 @@ class Waiter(object):
         retain = int(packet.get_retain())
         dup = int (packet.get_dup()) 
         clientid = self.connect.clientid
-        logging.info(f"R PUBLISH {topic} (d{dup} q{qos} r{retain} m{pid}) {clientid}")
+        logging.info(f"R PUBLISH {topic} (d{dup} q{qos} r{retain} m{pid}) cid:{clientid} app:{self.appid}")
         
         if qos==QoS.qos0 and dup:
             if self.protocol_version == protocol.MQTT50:
@@ -491,7 +491,7 @@ class Waiter(object):
 
     async def subscribe_handler(self, packet: Subscribe) -> Awaitable[None]:
         clientid = self.connect.clientid
-        logging.info(f"R SUBSCRIBE (m{packet.pid}) {clientid}")
+        logging.info(f"R SUBSCRIBE (m{packet.pid}) cid:{clientid} app:{self.appid}")
         rcodes = list()
         for top in packet.topicOpsList:
             tf = top.topic_filter
@@ -520,17 +520,17 @@ class Waiter(object):
                 rcodes.append(Reason.InvalidTopicFilter)
         pid = packet.get_pid()
         clientid = self.connect.clientid
-        logging.info(f"R UNSUBSCRIBE (m{pid}) {clientid}")
+        logging.info(f"R UNSUBSCRIBE (m{pid}) cid:{clientid}")
         await self.unsuback(pid, rcodes)
 
     async def pingresp(self) -> Awaitable[None]:
         packet = Pingresp(self.protocol_version)
         data = packet.full_pack()
         await self.transport.write(data)
-        logging.debug(f"S PINGRESP {self.connect.clientid}")
+        logging.debug(f"S PINGRESP cid:{self.connect.clientid} app:{self.appid}")
 
     async def pingreq_handler(self, packet: Pingreq) -> Awaitable[None]:
-        logging.debug(f"R PINGREQ  {self.connect.clientid}")
+        logging.debug(f"R PINGREQ  cid:{self.connect.clientid} app:{self.appid}")
         await self.pingresp()
 
     async def disconnect_handler(self, packet: Disconnect) -> Awaitable[None]:
@@ -552,7 +552,7 @@ class Waiter(object):
         self.state = State.DISCONNECTED_BY_CLIENT
         if self.protocol_version == protocol.MQTT50 and packet.rcode==Reason.DisconnectWithWillMessage:
             await self.deliveryWillMsg()
-        self.transport.close()
+      # self.transport.close()
 
     async def deliveryWillMsg(self) -> Awaitable[None]:
         if not self.connect.will:

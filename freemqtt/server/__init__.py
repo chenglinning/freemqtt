@@ -1,8 +1,3 @@
-# -*- coding: utf-8 -*-
-#
-# Copyright (C) 2010-2014 Internet Message Shuttle
-# Chenglin Ning, chenglinning@gmail.com
-#
+# Copyright (C) ben-ning@163.com
 # All rights reserved
-#
 #

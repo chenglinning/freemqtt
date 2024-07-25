@@ -31,7 +31,7 @@ Topic = NewType("Topic", str)
 PacketID = NewType("PacketID", int)
 TopicAlias = NewType("TopicAlias", int)
 ClientID = NewType("ClientID", str)
-AppID = NewType("ApplicationID", str)
+AppID = NewType("AppID", str)
 ShareName = NewType("ShareName", str)
 NodeID = NewType("NodeID", str)
 
