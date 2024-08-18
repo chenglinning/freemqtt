@@ -8,11 +8,11 @@ import signal
 
 from freemqtt.daemonweb.command import CommandHandler
 from freemqtt.server.config import MonitorCfg
+freemqttp = None
 
 def sig_handler(signum, frame):
     signame = signal.Signals(signum).name
     print(f'freemqtt monitor received signal {signame}({signum})')
-    from freemqtt.daemonweb.command import freemqttd_p as freemqttp
     if freemqttp:
         freemqttp.terminate()
         freemqttp.wait()

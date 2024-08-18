@@ -1,6 +1,7 @@
 # Copyright (C) ben-ning@163.com
 # All rights reserved
 #
+import sys
 import argparse
 import requests
 import json
@@ -14,7 +15,7 @@ url = f"http://{MonitorCfg.address}:{MonitorCfg.port}/cmd"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", help="command: start | stop | status | restart", choices=["start", "stop", "status", "restart"])
+    parser.add_argument("command", help="start | stop | status | restart", choices=["start", "stop", "status", "restart"])
     args = parser.parse_args()
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -22,8 +23,11 @@ if __name__ == "__main__":
     if result == 0:
         sock.close()
     else:
-        p = subprocess.Popen("python ./freemqttm.py", close_fds=True)
-        
+        if "freemqttctl.py" in sys.argv[0]:
+            p = subprocess.Popen("python ./freemqttm.py", close_fds=True, creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
+        else:
+            p = subprocess.Popen("./freemqttm", close_fds=True, creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
+            
     session = requests.Session()
     headers = {}
     headers["Content-Type"] = "application/json"

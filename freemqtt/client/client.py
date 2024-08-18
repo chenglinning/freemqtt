@@ -1,8 +1,10 @@
-# Copyright (C) Chenglin Ning chenglinning@gmail.com
+# Copyright (C) 2024-2034 freemqtt.cn
+# Chenglin Ning, chenglinning@gmail.com
 # All rights reserved
 # Code Licenced under Apache 2.
 #       http://www.apache.org/licenses/LICENSE-2.0
 #
+
 import time
 import logging
 import struct
@@ -12,10 +14,10 @@ from io import BytesIO
 from typing import Tuple, Dict
 from tornado.ioloop import IOLoop
 from tornado import gen
-from .config import Config
-from .authplugin import AuthPlugin
-from .common import State, PacketClass, Topic, TopicFilter, PacketID 
-from .common import TopicFilterRegexp, TopicPublishRegexp, SharedTopicRegexp
+from ..server.config import Config
+from ..server.authplugin import AuthPlugin
+from ..server.common import State, PacketClass, Topic, TopicFilter, PacketID 
+from ..server.common import TopicFilterRegexp, TopicPublishRegexp, SharedTopicRegexp
 
 from ..mqttp.packet import Packet
 from ..mqttp.connect import Connect
@@ -49,7 +51,7 @@ KEEP_ALIVE_TIMEOUT = 7
 CLOSED = 8
 FACTOR = 1.5
 
-class Waiter(object):
+class Client(object):
     def __init__(self, transport, address):
         self.state = State.INITIATED
         self.app = None
@@ -92,8 +94,8 @@ class Waiter(object):
         if len(tf)==0:
             return False
         splited_topic =  tf.split('/')
-        if len(splited_topic) > Config.maximum_topic_level:
-            logging.error(f"Level of topic filter > {Config.maximum_topic_level}: {tf}")
+        if len(splited_topic) > 4:
+            logging.error(f"Level of topic filter > 4: {tf}")
             return False
         if not TopicFilterRegexp.match(tf):
             logging.error(f"Verify topic filter fail: {tf}")
@@ -104,8 +106,8 @@ class Waiter(object):
         if len(topic)==0:
             return False
         splited_topic =  topic.split('/')
-        if len(splited_topic) > Config.maximum_topic_level:
-            logging.error(f"Level of topic > {Config.maximum_topic_level}: {topic}")
+        if len(splited_topic) > 4:
+            logging.error(f"Level of topic > 4: {topic}")
             return False
         if not TopicPublishRegexp.match(topic):
             logging.error(f"Verify topic fail: {topic}")
@@ -215,7 +217,7 @@ class Waiter(object):
             logging.info(f"Connection be closed. Reason: {rcode.name}")
             return
         
-        from .memdb import MemDB
+        from ..server.memdb import MemDB
         self.app = MemDB.instance().getApp(self.appid)
         self.app.connect_max = connect_max
         if self.app.curr_conn_num == connect_max:

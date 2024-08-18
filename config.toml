@@ -1,7 +1,7 @@
 [freemqtt]
 
 [freemqtt.tcp]
-address = "localhost"
+address = "0.0.0.0"
 port = 1883
 
 [freemqtt.ssl]
@@ -11,14 +11,18 @@ ssl_certificate = "./ssl/freemqtt.net.crt"
 ssl_certificate_key = "./ssl/freemqtt.net.key"
 
 [freemqtt.ws]
-address = "localhost"
-port = 8083
+address = "0.0.0.0"
+port = 8080
 
 [freemqtt.wss]
 address = "0.0.0.0"
-port = 8283
+port = 8443
 ssl_certificate = "./ssl/freemqtt.net.crt"
 ssl_certificate_key = "./ssl/freemqtt.net.key"
+
+[freemqtt.monitor]
+address = "localhost"
+port = 9080
 
 [freemqtt.log]
 path = "log/freemqtt.log"
@@ -38,8 +42,15 @@ log_level = "debug"
     shared_subscription_available = true
     server_keep_alive = 60 # in second
     response_information = "Welcome to FreeMQTT Broker."
-    maximun_connection = 32
+    
+    maximun_connection = 4096 # 4K
+    maximum_topic_level = 4
 
-[freemqtt.monitor]
-address = "localhost"
-port = 9080
+[freemqtt.db]
+path = "data/freemqtt.db"
+
+[freemqtt.auth]
+api_url = "https://yourwebsite.com/auth"
+# weixin
+# AppID: wx30ca472de74aa5db
+# AppSecret: e4a3ea071c88b86f179b0e10cc8f5d93

@@ -1,7 +1,7 @@
 # Copyright (C) 2020-2028 
 # Chenglin Ning, chenglinning@gmain.com
 #
-
+import sys
 import time, datetime
 import subprocess
 from .base import BaseHandler
@@ -21,8 +21,12 @@ freemqttd_p = None
 def start_freemqtt_broker():
     global freemqttd_p, status, start_time
     LogCfg = load_toml_config("./config.toml").log
-    cmdline = f"python freemqttd.py --daemon --log-file-prefix={LogCfg.path} --log-file-max-size={LogCfg.maxim_size} --logging={LogCfg.log_level}"
-    p = subprocess.Popen(cmdline, close_fds=False)
+    if "freemqttm.py" in sys.argv[0]:
+        cmdline = f"python ./freemqttd.py --daemon --log-file-prefix={LogCfg.path} --log-file-max-size={LogCfg.maxim_size} --logging={LogCfg.log_level}"
+    else:
+        cmdline = f"./freemqttd --daemon --log-file-prefix={LogCfg.path} --log-file-max-size={LogCfg.maxim_size} --logging={LogCfg.log_level}"
+        
+    p = subprocess.Popen(cmdline, close_fds=False, creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
     start_time = int(time.time())
     return p
 
@@ -54,7 +58,7 @@ class CommandHandler(BaseHandler):
         if cmd=="status":
             if status==State.running:
                 days, hours, minutes, seconds = uptime(start_time)
-                msg = f"freemqttd RUNNING pid {freemqttd_p.pid}, uptime {days} days, {hours}:{minutes}:{seconds}"
+                msg = f"freemqttd v1.02 RUNNING pid {freemqttd_p.pid}, uptime {days} days, {hours}:{minutes}:{seconds}"
                 self.set_error_string(msg)
             elif status==State.stop: 
                 dt = datetime.datetime.fromtimestamp(stop_time)
