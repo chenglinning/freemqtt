@@ -11,7 +11,7 @@ class AuthPlugin(object):
         self.appid = None
         self.connect_max = 128
 
-    def auth_token(self, token:str=None) -> Tuple[str, int]:
+    def auth_token(self, token:str=None) -> str:
         logging.info(f'Token: {token}')
         try:
             appid = verifyToken(token)
@@ -20,4 +20,4 @@ class AuthPlugin(object):
             appid = None
         self.appid = appid
         logging.info(f"AppID: {appid}")
-        return (self.appid, self.connect_max)
+        return self.appid

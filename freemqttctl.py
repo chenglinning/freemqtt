@@ -2,6 +2,8 @@
 # All rights reserved
 #
 import sys
+import os
+import time
 import argparse
 import requests
 import json
@@ -14,20 +16,30 @@ jwtoken = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhcGlrZXkiOiI5NzY2Y2MxMzFmZTg3
 url = f"http://{MonitorCfg.address}:{MonitorCfg.port}/cmd"
 
 if __name__ == "__main__":
+#   print( subprocess._USE_POSIX_SPAWN, subprocess._USE_VFORK)
     parser = argparse.ArgumentParser()
     parser.add_argument("command", help="start | stop | status | restart", choices=["start", "stop", "status", "restart"])
     args = parser.parse_args()
-
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     result = sock.connect_ex((MonitorCfg.address, MonitorCfg.port))
+    
+    if os.name == "nt":
+        si = subprocess.STARTUPINFO()
+        si.dwFlags = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
+    
     if result == 0:
         sock.close()
     else:
+        print ("starting freemqttd ...")
         if "freemqttctl.py" in sys.argv[0]:
-            p = subprocess.Popen("python ./freemqttm.py", close_fds=True, creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
+            command = ["python", "./freemqttm.py"]
+            p = subprocess.Popen(command, close_fds=True, startupinfo=si)
+#           p = subprocess.Popen("python ./freemqttm.py", close_fds=True, creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
         else:
-            p = subprocess.Popen("./freemqttm", close_fds=True, creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
-            
+            command = ["./freemqttm"]
+            p = subprocess.Popen(command, close_fds=True, creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
+#           p = subprocess.Popen("./freemqttm", close_fds=True, creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
+        time.sleep(5)
     session = requests.Session()
     headers = {}
     headers["Content-Type"] = "application/json"

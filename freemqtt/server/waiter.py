@@ -3,7 +3,7 @@
 # Code Licenced under Apache 2.
 #       http://www.apache.org/licenses/LICENSE-2.0
 #
-import time
+import time, json
 import logging
 import struct
 from typing import Awaitable, List
@@ -12,7 +12,7 @@ from io import BytesIO
 from typing import Tuple, Dict
 from tornado.ioloop import IOLoop
 from tornado import gen
-from .config import Config
+from .config import Config, CommonCfg
 from .authplugin import AuthPlugin
 from .common import State, PacketClass, Topic, TopicFilter, PacketID 
 from .common import TopicFilterRegexp, TopicPublishRegexp, SharedTopicRegexp
@@ -48,6 +48,8 @@ CLOSING_FOR_EXCEPTION = 6
 KEEP_ALIVE_TIMEOUT = 7
 CLOSED = 8
 FACTOR = 1.5
+ONLINE = 1
+OFFLINE = 0
 
 class Waiter(object):
     def __init__(self, transport, address):
@@ -92,8 +94,8 @@ class Waiter(object):
         if len(tf)==0:
             return False
         splited_topic =  tf.split('/')
-        if len(splited_topic) > Config.maximum_topic_level:
-            logging.error(f"Level of topic filter > {Config.maximum_topic_level}: {tf}")
+        if len(splited_topic) > CommonCfg.maximum_topic_level:
+            logging.error(f"Level of topic filter > {CommonCfg.maximum_topic_level}: {tf}")
             return False
         if not TopicFilterRegexp.match(tf):
             logging.error(f"Verify topic filter fail: {tf}")
@@ -104,8 +106,8 @@ class Waiter(object):
         if len(topic)==0:
             return False
         splited_topic =  topic.split('/')
-        if len(splited_topic) > Config.maximum_topic_level:
-            logging.error(f"Level of topic > {Config.maximum_topic_level}: {topic}")
+        if len(splited_topic) > CommonCfg.maximum_topic_level:
+            logging.error(f"Level of topic > {CommonCfg.maximum_topic_level}: {topic}")
             return False
         if not TopicPublishRegexp.match(topic):
             logging.error(f"Verify topic fail: {topic}")
@@ -187,11 +189,15 @@ class Waiter(object):
                   # logging.info(f'packet version: {packet.version}')
                     await self.handle_packet(packet)
                 else:
-                    if self.state == State.CONNECTED and self.protocol_version==protocol.MQTT50:
+                   #if self.state == State.CONNECTED and self.protocol_version==protocol.MQTT50:
+                    if self.state == State.CONNECTED:
                         await self.disconnect(Reason.MalformedPacket)
-                    self.transport.close()
+                    else:
+                        self.transport.close()
             except TransportClosedError:
                 logging.error(f"remote: {self.remote_ip} be closed")
+                if self.state == State.CONNECTED:
+                    await self.notify_status(status=OFFLINE, reason="transport closed error")
                 await self.closed_handler()
                 break
             
@@ -207,7 +213,7 @@ class Waiter(object):
         self.state = State.CONNECTING
         self.connect = packet
         self.protocol_version = packet.get_version()
-        self.appid, connect_max =  self.auth_plugin.auth_token(packet.password)
+        self.appid = self.auth_plugin.auth_token(packet.password)
         if not self.appid:
             rcode = Reason.RefusedBadUsernameOrPassword
             await self.connack(0x00, rcode)
@@ -217,25 +223,26 @@ class Waiter(object):
         
         from .memdb import MemDB
         self.app = MemDB.instance().getApp(self.appid)
+        """
         self.app.connect_max = connect_max
         if self.app.curr_conn_num == connect_max:
             rcode = Reason.QuotaExceeded
             await self.connack(0x00, rcode)
             self.transport.close()
             logging.info(f"Connection be closed. Reason: {rcode.name}")
-
+        """
         ack_flags = 0x00
         need_resume = False
         if self.app.sessionPresent(packet.clientid):
             session = self.app.getSession(packet.clientid)
             waiter = session.waiter
-            logging.info(f"session is present: {packet.clientid} state: {waiter.state.name}")
+            logging.info(f"present session, app/cid:{self.appid}/{packet.clientid} state:{waiter.state.name}")
             if waiter.state==State.CONNECTED:
                 waiter.state = State.KICKOUT
                 need_resume = False
                 await waiter.disconnect(Reason.SessionTakenOver)
                 waiter.transport.close()
-                logging.info(f"KICKOUT: cid: {packet.clientid} ip: {waiter.remote_ip}")
+                logging.info(f"KICKOUT app/cid:{self.appid}/{packet.clientid} ip:{waiter.remote_ip}")
             else:
                 need_resume = True
 
@@ -246,7 +253,7 @@ class Waiter(object):
                 session.waiter = self
                 ack_flags = 0x01
         else:
-            logging.info(f"session is not present: {packet.clientid}")
+            logging.info(f"new session, app/cid:{self.appid}/{packet.clientid}")
             self.app.addSession(packet.clientid, self)
 
         self.receive_quota = Config.receive_maximum # give by server
@@ -255,8 +262,7 @@ class Waiter(object):
         self.alias_maximum = alias_maximun if alias_maximun else Config.topic_alias_maximum
         self.keep_alive = packet.keep_alive if packet.keep_alive>0 else Config.server_keep_alive
         IOLoop.current().spawn_callback(self.keep_alive_timeout)
-
-        logging.info(f"R CONNECT clean_start({int(packet.clean_start)}) keep_alive_interval({packet.keep_alive}) level({self.protocol_version}) {packet.clientid}")
+        logging.info(f"R CONNECT clean_start({int(packet.clean_start)}) keep_alive_interval({packet.keep_alive}) level({self.protocol_version}) app/cid:{self.appid}/{packet.clientid}")
         await self.connack(ack_flags, Reason.Success)
         self.state = State.CONNECTED
         if need_resume:
@@ -309,8 +315,10 @@ class Waiter(object):
         
         data = packet.full_pack()
         await self.transport.write(data)
-        logging.info(f"S CONNACK cid:{self.connect.clientid} app:{self.appid}")
-
+        logging.info(f"S CONNACK app/cid:{self.appid}/{self.connect.clientid}")
+        if rcode==Reason.Success:
+            await self.notify_status(status=ONLINE, reason="connect")     
+            
     async def disconnect(self, rcode: Reason) -> Awaitable[None]:
         packet = Disconnect(self.protocol_version)
         if self.protocol_version == protocol.MQTT50:
@@ -320,7 +328,8 @@ class Waiter(object):
             await self.transport.write(data)
         self.state = State.DISCONNECTED_BY_SERVER
         self.transport.close()
-        logging.info(f"S DISCONNECT cid:{self.connect.clientid} app:{self.appid}")
+        await self.notify_status(status=OFFLINE, reason=rcode.name)            
+        logging.info(f"S DISCONNECT app/cid:{self.appid}/{self.connect.clientid}")
 
     async def publish_handler(self, packet: Publish) -> Awaitable[None]:
         qos = packet.get_qos()
@@ -329,7 +338,7 @@ class Waiter(object):
         retain = int(packet.get_retain())
         dup = int (packet.get_dup()) 
         clientid = self.connect.clientid
-        logging.info(f"R PUBLISH {topic} (d{dup} q{qos} r{retain} m{pid}) cid:{clientid} app:{self.appid}")
+        logging.info(f"R PUBLISH t:{topic} (d{dup} q{qos} r{retain} m{pid} v{packet.get_version()}) app/cid:{self.appid}/{clientid}")
         
         if qos==QoS.qos0 and dup:
             if self.protocol_version == protocol.MQTT50:
@@ -337,7 +346,7 @@ class Waiter(object):
             else:
                 self.state = State.DISCONNECTED_BY_SERVER
             self.transport.close()
-            logging.error("Connection be closed. Reason: d{dup} q{qos}")
+            logging.error(f"Connection be closed. Reason: d{dup} q{qos} app/cid:{self.appid}/{clientid}")
             return
         # handle topic alias
         if self.protocol_version==protocol.MQTT50:
@@ -345,7 +354,7 @@ class Waiter(object):
             alias = packet.topic_alias()
             if not alias is None:
                 if alias == 0 or alias > Config.topic_alias_maximum:
-                    logging.error(f"Invalid topic alias:{alias} topic:{topic}")
+                    logging.error(f"Invalid topic alias:{alias} topic:{topic} app/cid:{self.appid}/{clientid}")
                     await self.disconnect(Reason.InvalidTopicAlias)
                     return
                 if topic:
@@ -354,7 +363,7 @@ class Waiter(object):
                     topic = self.alias2topic_map[alias]
                     packet.set_topic(topic)
                 else:                
-                    logging.error(f"Protocol error topic alias:{alias} not in map")
+                    logging.error(f"Protocol error topic alias:{alias} not in map. app/cid:{self.appid}/{clientid}")
                     await self.disconnect(Reason.ProtocolError)
                     return
                 
@@ -364,14 +373,14 @@ class Waiter(object):
             else:
                 self.state = State.DISCONNECTED_BY_SERVER
             self.transport.close()
-            logging.error("Connection be closed. Reason: InvalidTopicName")
+            logging.error(f"Connection be closed. Reason: InvalidTopicName. app/cid:{self.appid}/{clientid}")
             return
                 
         rcode = Reason.Success
         if qos > 0 and not dup:
             if self.receive_quota == 0:
                 rcode = Reason.QuotaExceeded
-                logging.warning(f"warning: QuotaExceeded {self.connect.receive_maximum()}")
+                logging.warning(f"warning: QuotaExceeded {self.connect.receive_maximum()} app/cid:{self.appid}/{clientid}")
             else:
                 self.receive_quota -= 1
         if qos == QoS.qos1:
@@ -381,7 +390,9 @@ class Waiter(object):
             if pid not in self.app.getSession(clientid).incoming_inflight:
                 self.app.getSession(clientid).add_incoming_inflight_message(packet)
             await self.pubrec(pid, rcode)
-
+            
+        self.app.received_message_count += 1
+        
         packet.from_clientid = clientid
         payload = packet.payload
         if retain :
@@ -400,7 +411,7 @@ class Waiter(object):
             packet.set_reason_code(rcode)
         data = packet.full_pack()
         await self.transport.write(data)
-        logging.info(f"S PUBACK (m{pid}) {self.connect.clientid}")
+        logging.info(f"S PUBACK (m{pid} v{packet.get_version()}) app/cid:{self.appid}/{self.connect.clientid}")
         
     async def pubrec(self, pid: PacketID, rcode: Reason) -> Awaitable[None]:
         packet = Pubrec(self.protocol_version)
@@ -409,7 +420,7 @@ class Waiter(object):
             packet.set_reason_code(rcode)
         data = packet.full_pack()
         await self.transport.write(data)
-        logging.info(f"S PUBREC (m{pid}) {self.connect.clientid}")
+        logging.info(f"S PUBREC (m{pid} v{packet.get_version()}) app/cid:{self.appid}/{self.connect.clientid}")
 
     async def pubrel(self, pid: PacketID, rcode: Reason) -> Awaitable[None]:
         packet = Pubrel(self.protocol_version)
@@ -419,7 +430,7 @@ class Waiter(object):
             packet.set_reason_code(rcode)
         data = packet.full_pack()
         await self.transport.write(data)
-        logging.info(f"S PUBREL (m{pid}) {self.connect.clientid}")
+        logging.info(f"S PUBREL (m{pid} v{packet.get_version()}) app/cid:{self.appid}/{self.connect.clientid}")
 
     async def pubcomp(self, pid: PacketID, rcode: Reason) -> Awaitable[None]:
         packet = Pubcomp(self.protocol_version)
@@ -429,15 +440,15 @@ class Waiter(object):
         data = packet.full_pack()
         await self.transport.write(data)
 
-        logging.info(f"S PUBCOMP (m{pid}) {self.connect.clientid}")
+        logging.info(f"S PUBCOMP (m{pid} v{packet.get_version()}) app/cid:{self.appid}/{self.connect.clientid}")
 
     async def puback_handler(self, packet: Puback) -> Awaitable[None]:
         pid = packet.get_pid()
         clientid = self.connect.clientid
-        logging.info(f"R PUBACK (m{pid}) {clientid}")
+        logging.info(f"R PUBACK (m{pid} v{packet.get_version()}) app/cid:{self.appid}/{clientid}")
         if not self.app.getSession(clientid).verify_outgoing_inflight_message(pid, PacketType.PUBLISH):
             await self.disconnect(Reason.ProtocolError)
-            logging.error("Not expected PUBACK packet")
+            logging.error(f"Not expected PUBACK packet. app/cid:{self.appid}/{self.connect.clientid}")
             return
         self.send_quota += 1
         self.app.getSession(clientid).remove_outgoing_inflight_message(pid)
@@ -445,20 +456,20 @@ class Waiter(object):
     async def pubrec_handler(self, packet: Pubrec) -> Awaitable[None]:
         pid = packet.get_pid()
         clientid = self.connect.clientid
-        logging.info(f"R PUBREC (m{pid}) {clientid}")
+        logging.info(f"R PUBREC (m{pid} v{packet.get_version()}) app/cid:{self.appid}/{self.connect.clientid}")
         if not self.app.getSession(clientid).verify_outgoing_inflight_message(pid, PacketType.PUBLISH):
             await self.disconnect(Reason.ProtocolError)
-            logging.error("Not expected PUBREC packet")
+            logging.error(f"Not expected PUBREC packet. app/cid:{self.appid}/{self.connect.clientid}")
             return
         await self.pubrel(pid, Reason.Success)
 
     async def pubrel_handler(self, packet: Pubrel) -> Awaitable[None]:
         pid = packet.get_pid()
         clientid = self.connect.clientid
-        logging.info(f"R PUBREL (m{pid}) {clientid}")
+        logging.info(f"R PUBREL (m{pid} v{packet.get_version()}) app/cid:{self.appid}/{self.connect.clientid}")
         if not self.app.getSession(clientid).verify_incoming_inflight_message(pid, PacketType.PUBLISH):
             await self.disconnect(Reason.ProtocolError)
-            logging.error("Not expected PUBREL packet")
+            logging.error(f"Not expected PUBREL packet. app/cid:{self.appid}/{self.connect.clientid}")
             return
         self.app.getSession(clientid).remove_incoming_inflight_message(pid)
         self.receive_quota += 1
@@ -467,10 +478,10 @@ class Waiter(object):
     async def pubcomp_handler(self, packet: Pubcomp) -> Awaitable[None]:
         pid = packet.get_pid()
         clientid = self.connect.clientid
-        logging.info(f"R PUBCOMP (m{pid}) {clientid}")
+        logging.info(f"R PUBCOMP (m{pid} v{packet.get_version()}) app/cid:{self.appid}/{self.connect.clientid}")
         if not self.app.getSession(clientid).verify_outgoing_inflight_message(pid, PacketType.PUBREL):
             await self.disconnect(Reason.ProtocolError)
-            logging.error("Not expected PUBREC packet")
+            logging.error(f"Not expected PUBREC packet. app/cid:{self.appid}/{self.connect.clientid}")
             return
         self.send_quota += 1
         self.app.getSession(clientid).remove_outgoing_inflight_message(pid)
@@ -480,20 +491,22 @@ class Waiter(object):
         packet.set_pid(pid)
         data = packet.full_pack()
         await self.transport.write(data)
-        logging.info(f"S SUBACK (m{pid}) {self.connect.clientid}")
+        logging.info(f"S SUBACK (m{pid} v{packet.get_version()}) app/cid:{self.appid}/{self.connect.clientid}")
 
     async def unsuback(self, pid: PacketID, rcodes: List[Reason]) -> Awaitable[None]:
         packet = Unsuback(self.protocol_version, rcodes)
         packet.set_pid(pid)
         data = packet.full_pack()
         await self.transport.write(data)
-        logging.info(f"S UNSUBACK (m{pid}) {self.connect.clientid}")
+        logging.info(f"S UNSUBACK (m{pid} v{packet.get_version()}) app/cid:{self.appid}/{self.connect.clientid}")
 
     async def subscribe_handler(self, packet: Subscribe) -> Awaitable[None]:
         clientid = self.connect.clientid
-        logging.info(f"R SUBSCRIBE (m{packet.pid}) cid:{clientid} app:{self.appid}")
+        logging.info(f"R SUBSCRIBE (m{packet.pid} v{packet.get_version()}) app/cid:{self.appid}/{self.connect.clientid}")
         rcodes = list()
+        no = 0
         for top in packet.topicOpsList:
+            no += 1
             tf = top.topic_filter
             if self.verifyTopicFilter(tf):
                 if SharedTopicRegexp.match(tf) and top.NL():
@@ -506,6 +519,7 @@ class Waiter(object):
             else:
                 rcodes.append(Reason.InvalidTopicFilter)
                 top.valid = False
+            logging.info(f"  item-{no:02d}: tf:{tf} qos:{top.QoS()} option:0x{top.options:02X} valid:{top.valid}")
         pid = packet.get_pid()
         await self.suback(pid, rcodes)
         await self.app.dispatchRetainMessages(packet, clientid)
@@ -520,17 +534,17 @@ class Waiter(object):
                 rcodes.append(Reason.InvalidTopicFilter)
         pid = packet.get_pid()
         clientid = self.connect.clientid
-        logging.info(f"R UNSUBSCRIBE (m{pid}) cid:{clientid}")
+        logging.info(f"R UNSUBSCRIBE (m{pid} v{packet.get_version()}) app/cid:{self.appid}/{self.connect.clientid}")
         await self.unsuback(pid, rcodes)
 
     async def pingresp(self) -> Awaitable[None]:
         packet = Pingresp(self.protocol_version)
         data = packet.full_pack()
         await self.transport.write(data)
-        logging.debug(f"S PINGRESP cid:{self.connect.clientid} app:{self.appid}")
+        logging.debug(f"S PINGRESP app/cid:{self.appid}/{self.connect.clientid}")
 
     async def pingreq_handler(self, packet: Pingreq) -> Awaitable[None]:
-        logging.debug(f"R PINGREQ  cid:{self.connect.clientid} app:{self.appid}")
+        logging.debug(f"R PINGREQ  app/cid:{self.appid}/{self.connect.clientid}")
         await self.pingresp()
 
     async def disconnect_handler(self, packet: Disconnect) -> Awaitable[None]:
@@ -538,13 +552,13 @@ class Waiter(object):
         sei0 = self.connect.session_expiry_interval()
         self.disconnect_rcode = packet.rcode
         if (self.state != State.CONNECTED) or (sei0==0 and sei>0):
-            logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}")
-            if self.protocol_version == protocol.MQTT50:
-                await self.disconnect(Reason.ProtocolError)
-            logging.error(f"Connection be closed. reason: ProtocolError")
+            logging.error(f"Error state:{self.state} remote ip:{self.remote_ip}. app/cid:{self.appid}/{self.connect.clientid}")
+        #   if self.protocol_version == protocol.MQTT50:
+            await self.disconnect(Reason.ProtocolError)
+            logging.error(f"Connection be closed. reason: ProtocolError. app/cid:{self.appid}/{self.connect.clientid}")
             return
         
-        logging.info(f"R DISCONNECT {self.connect.clientid}")
+        logging.info(f"R DISCONNECT app/cid:{self.appid}/{self.connect.clientid}")
         session = self.app.getSession(self.connect.clientid)
         if session:
             session.sei = sei
@@ -552,7 +566,8 @@ class Waiter(object):
         self.state = State.DISCONNECTED_BY_CLIENT
         if self.protocol_version == protocol.MQTT50 and packet.rcode==Reason.DisconnectWithWillMessage:
             await self.deliveryWillMsg()
-      # self.transport.close()
+        await self.notify_status(status=OFFLINE, reason="disconnect by client")            
+      # self.transport.close() # if enable, mqtt over websocket ssl , client error.
 
     async def deliveryWillMsg(self) -> Awaitable[None]:
         if not self.connect.will:
@@ -575,7 +590,7 @@ class Waiter(object):
         mei = mei if mei else Config.message_expiry_interval
         packet.expire_at = time.time() + mei 
 
-        logging.info(f"Will Message topic: {self.connect.will_topic} qos: {self.connect.will_qos}")
+        logging.info(f"Will Message topic: {self.connect.will_topic} qos: {self.connect.will_qos} app/cid:{self.appid}/{self.connect.clientid}")
         await self.app.dispatch(packet)
 
     async def auth_handler(self, packet: Auth) -> Awaitable[None]:
@@ -617,8 +632,9 @@ class Waiter(object):
             await gen.sleep(duration)
             cur_timestamp = time.time()
             if self.state == State.CONNECTED and cur_timestamp - self.last_timestamp > duration:
-                logging.info(f"TIMEOUT: clientID: {self.connect.clientid} ip: {self.remote_ip}")
+                logging.info(f"TIMEOUT app/cid:{self.appid}/{self.connect.clientid} ip:{self.remote_ip}")
                 self.transport.close()
+                await self.notify_status(status=OFFLINE, reason="keep_alive_timeout")
                 return
 
     async def session_expired(self, sei: int) -> Awaitable[None]:
@@ -628,6 +644,27 @@ class Waiter(object):
         if session and session.waiter.state==State.WAITING_EXPIRED:
             self.state = State.EXPIRED
             self.app.delSession(self.connect.clientid)
-            logging.info(f"Session expired clientID: {self.connect.clientid}")
+            logging.info(f"Session expired app/cid:{self.appid}/{self.connect.clientid}")
         else:
-            logging.info(f"clientID: {self.connect.clientid} reconnected")
+            logging.info(f"Reconnected app/cid:{self.appid}/{self.connect.clientid}")
+            
+    async def notify_status(self, status:int=OFFLINE, reason:str=None ) -> None:
+        if status==ONLINE:
+            topic = "$SYS/ONLINE"
+        elif status==OFFLINE:
+            topic = "$SYS/OFFLINE"
+        else:
+            return 
+        data = {
+            "appid":       self.appid,
+            "clientId":    self.connect.clientid,
+            "timestamp":    int(time.time()),
+            "reason":       reason,
+        }
+        payload = json.dumps(data)
+        packet = Publish()
+        packet.set_topic(topic)
+        packet.set_qos(1)
+        packet.expire_at = int(time.time() + Config.message_expiry_interval)
+        packet.set_payload(payload.encode("utf-8"))
+        await self.app.dispatch(packet)

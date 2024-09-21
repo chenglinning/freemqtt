@@ -36,7 +36,7 @@ ShareName = NewType("ShareName", str)
 NodeID = NewType("NodeID", str)
 
 TopicFilterRegexp = re.compile(r'^[^/](([^+#]*|\+)(/([^+#]*|\+))*(/#)?|#)$')
-TopicPublishRegexp = re.compile(r'^[^/][^#+]*$')
+TopicPublishRegexp = re.compile(r'^[^/$][^#+]*$')
 SharedTopicRegexp = re.compile(r'^\$share/([^#+/]+)(/)(.+)$')
 BasicUTFRegexp = re.compile(r'^[^\u0000-\u001F\u007F-\u009F]*$')
 FACTOR = 1.382

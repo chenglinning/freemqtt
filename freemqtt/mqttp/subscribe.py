@@ -100,7 +100,7 @@ class Subscribe(Packet):
             topic_filter = utils.read_string(r)
             if not topic_filter:
                 break
-            logging.info(f"topfic filter: {topic_filter}")
+           #logging.info(f"topfic filter: {topic_filter}")
             options = utils.read_int8(r)
             if options is None:
                 logging.error("Error subscribe options: None")

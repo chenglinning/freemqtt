@@ -1,34 +1,54 @@
 [freemqtt]
 
+# 通用配置
+[freemqtt.common]
+    # 用于生成客户端的 token 和 MQTT 客户端连接鉴权用的秘钥 
+    # 必须为64位十六进制字符串（二进制256位秘钥）
+    # 一定要注意保管，避免向外泄漏
+    secret = "F593BDE387F7530CF0F35CC2DB763F755AB770E779C0FD0C3AB018E7439E2A3D"
+    # 最大topic & topic filter 级别，默认4
+    maximum_topic_level = 4
+
+    # 发布 FreeMQTT 统计信息间隔
+    pub_sys_stat_interval = 300 # in seconds    
+
+# 监听 1883 端口及ip地址
 [freemqtt.tcp]
 address = "0.0.0.0"
 port = 1883
 
+# 监听 8883 (TLS/SSL) 端口及ip地址, 如要禁止，请在每行前加 # 字符注释掉
 [freemqtt.ssl]
 address = "0.0.0.0"
 port = 8883
 ssl_certificate = "./ssl/freemqtt.net.crt"
 ssl_certificate_key = "./ssl/freemqtt.net.key"
 
+# 监听 8080 (websocket) 端口及ip地址, 如要禁止，请在每行前加 # 字符注释掉
 [freemqtt.ws]
 address = "0.0.0.0"
 port = 8080
 
+# 监听 8443 (websocket over TLS/SSL) 端口及ip地址, 如要禁止，请在每行前加 # 字符注释掉
 [freemqtt.wss]
 address = "0.0.0.0"
 port = 8443
 ssl_certificate = "./ssl/freemqtt.net.crt"
 ssl_certificate_key = "./ssl/freemqtt.net.key"
 
+# 9080 (web) 这是freemqttctl 管理工具需要管理用的web api 端口， 一定要保留！
 [freemqtt.monitor]
 address = "localhost"
 port = 9080
 
+# 日志文件的未知及每个文件的大小，共10个log 文件进行循环保存 
+#     freemqtt.log.1 freemqtt.log.2 freemqtt.log.3 ... freemqtt.log.10
 [freemqtt.log]
 path = "log/freemqtt.log"
 maxim_size = 10485760 # 10M
 log_level = "debug"
 
+#  MQTT 5.0 属性配置
 [freemqtt.properties]
     session_expiry_interval = 7200 # in second
     message_expiry_interval = 7200 # in second
@@ -42,15 +62,3 @@ log_level = "debug"
     shared_subscription_available = true
     server_keep_alive = 60 # in second
     response_information = "Welcome to FreeMQTT Broker."
-    
-    maximun_connection = 4096 # 4K
-    maximum_topic_level = 4
-
-[freemqtt.db]
-path = "data/freemqtt.db"
-
-[freemqtt.auth]
-api_url = "https://yourwebsite.com/auth"
-# weixin
-# AppID: wx30ca472de74aa5db
-# AppSecret: e4a3ea071c88b86f179b0e10cc8f5d93

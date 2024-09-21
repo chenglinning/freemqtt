@@ -142,8 +142,9 @@ class MQTTSession(object):
                 
         if qos==QoS.qos0 and self.waiter.state==State.CONNECTED:
             data = packet2.full_pack()
+            self.waiter.app.sent_message_count += 1
             await self.waiter.transport.write(data)
-            logging.info(f"S PUBLISH {topic} (d{dup} q{qos} r{retain} m{pid}) {self.waiter.connect.clientid} level({packet2.get_version()})")
+            logging.info(f"S PUBLISH {topic} (d{dup} q{qos} r{retain} m{pid} v{packet2.get_version()}) app/cid:{self.waiter.appid}/{self.waiter.connect.clientid}")
             return True
        
         pid = self.next_pid()      
@@ -157,33 +158,36 @@ class MQTTSession(object):
         maxpsize = self.waiter.connect.maximum_packet_size()
         psize = len(data)
         if psize > maxpsize:
-            logging.error(f"{Reason.PacketTooLarge.name}. Packet size: {psize} > {maxpsize} {clientid}")
+            logging.error(f"{Reason.PacketTooLarge.name}. Packet size: {psize} > {maxpsize}. app/cid:{self.waiter.appid}/{clientid}")
             return False
-        self.add_outgoing_inflight_message(packet3)
+#       self.add_outgoing_inflight_message(packet3)
 
         if self.waiter.state==State.CONNECTED:
+            self.add_outgoing_inflight_message(packet3)
             if self.waiter.send_quota:
                 self.waiter.send_quota -= 1
+                self.waiter.app.sent_message_count += 1
                 await self.waiter.transport.write(data)
-                logging.info(f"S PUBLISH {topic} (d{dup} q{qos} r{retain} m{pid}) {clientid} level({packet2.get_version()})")
+                logging.info(f"S PUBLISH t:{topic} (d{dup} q{qos} r{retain} m{pid} v{packet2.get_version()}) app/cid:{self.waiter.appid}/{self.waiter.connect.clientid}")
                 return True
             else:
-                logging.warning(f"Send quota is 0 for {clientid} level({packet2.get_version()})")
-        else:
-            logging.info(f"Q PUBLISH {topic} (d{dup} q{qos} r{retain} m{pid}) {clientid} level({packet2.get_version()})")
+                logging.warning(f"Error send quota 0. (v{packet2.get_version()}) app/cid:{self.waiter.appid}/{self.waiter.connect.clientid}")
+#       else:
+#           logging.info(f"Q PUBLISH {topic} (d{dup} q{qos} r{retain} m{pid}) {clientid} level({packet2.get_version()})")
 
         return False
 
     async def resume(self) -> bool:
-        logging.debug(f'Beging resume for clientid: {self.waiter.connect.clientid}')
+        logging.debug(f'Beging resume. app/cid:{self.waiter.appid}/{self.waiter.connect.clientid}')
         for pid, packet in self.outgoing_inflight.items():
             now = time.time()
             if packet.get_type()==PacketType.PUBLISH:
                 if  now > packet.expire_at:
-                    logging.info(f'Resume {packet.pktype.name()} expired topic {packet.topic} (q{packet.get_qos()} r{int(packet.get_retain())}) to {self.waiter.connect.clientid}')
+                    logging.info(f'Resume {packet.pktype.name()} expired topic {packet.topic} (q{packet.get_qos()} r{int(packet.get_retain())}) app/cid:{self.waiter.appid}/{self.waiter.connect.clientid}')
                     return False
                 packet.set_expired_interval(int(packet.expire_at - now))
+                self.waiter.app.sent_message_count += 1
             packet.set_dup(True)
             data = packet.full_pack()
             await self.waiter.transport.write(data)
-            logging.info(f"Resume {packet.pktype.name} (m{pid}) to {self.waiter.connect.clientid} level({packet.get_version()})")
+            logging.info(f"Resume {packet.pktype.name} (m{pid} v{{packet.get_version()}}) app/cid:{self.waiter.appid}/{self.waiter.connect.clientid}")

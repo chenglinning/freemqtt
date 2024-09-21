@@ -17,7 +17,8 @@ def load_toml_config(path: str) -> tuple:
     LOG = namedtuple("WSS", toml_cfg["freemqtt"]["log"].keys()) if "log" in toml_cfg["freemqtt"] else None
     PROPS = namedtuple("PROPS", toml_cfg["freemqtt"]["properties"].keys()) if "properties" in toml_cfg["freemqtt"] else None
     MONITOR = namedtuple("MONITOR", toml_cfg["freemqtt"]["monitor"].keys()) if "monitor" in toml_cfg["freemqtt"] else None
-    DB = namedtuple("WS", toml_cfg["freemqtt"]["db"].keys())  if "db" in toml_cfg["freemqtt"] else None
+#   DB = namedtuple("DB", toml_cfg["freemqtt"]["db"].keys())  if "db" in toml_cfg["freemqtt"] else None
+    COMMON = namedtuple("COMMON", toml_cfg["freemqtt"]["common"].keys())  if "common" in toml_cfg["freemqtt"] else None
 
     temp_config = {
         "tcp": TCP(**toml_cfg["freemqtt"]["tcp"]) if TCP else None,
@@ -26,8 +27,9 @@ def load_toml_config(path: str) -> tuple:
         "wss": WSS(**toml_cfg["freemqtt"]["wss"]) if WSS else None,
         "log": LOG(**toml_cfg["freemqtt"]["log"]) if LOG else None,
         "props": PROPS(**toml_cfg["freemqtt"]["properties"]) if PROPS else None,
-        "monitor": MONITOR(**toml_cfg["freemqtt"]["monitor"]) if PROPS else None,
-        "db":  DB(**toml_cfg["freemqtt"]["db"]) if WS else None,
+        "monitor": MONITOR(**toml_cfg["freemqtt"]["monitor"]) if MONITOR else None,
+#       "db":  DB(**toml_cfg["freemqtt"]["db"]) if DB else None,
+        "common":  COMMON(**toml_cfg["freemqtt"]["common"]) if COMMON else None,
     }
     FreeMQTT_Config = namedtuple("FreeMQTT_Config", temp_config.keys())
     freemqtt_config = FreeMQTT_Config(**temp_config)
@@ -37,4 +39,4 @@ tmp_cfg = load_toml_config("./config.toml")
 Config = tmp_cfg.props
 LogCfg = tmp_cfg.log
 MonitorCfg = tmp_cfg.monitor
-DBCfg = tmp_cfg.db
+CommonCfg = tmp_cfg.common

@@ -2,6 +2,7 @@
 # Chenglin Ning, chenglinning@gmain.com
 #
 import sys
+import os
 import time, datetime
 import subprocess
 from .base import BaseHandler
@@ -19,14 +20,20 @@ stop_time = int(time.time())
 freemqttd_p = None
 
 def start_freemqtt_broker():
+    if os.name == "nt":
+        si = subprocess.STARTUPINFO()
+        si.dwFlags = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
+    else:
+        si = None
     global freemqttd_p, status, start_time
     LogCfg = load_toml_config("./config.toml").log
     if "freemqttm.py" in sys.argv[0]:
-        cmdline = f"python ./freemqttd.py --daemon --log-file-prefix={LogCfg.path} --log-file-max-size={LogCfg.maxim_size} --logging={LogCfg.log_level}"
+       #cmdline = f"python ./freemqttd.py --daemon --log-file-prefix={LogCfg.path} --log-file-max-size={LogCfg.maxim_size} --logging={LogCfg.log_level}"
+        command = [ "python", "./freemqttd.py", "--daemon", f"--log-file-prefix={LogCfg.path}", f"--log-file-max-size={LogCfg.maxim_size}", f"--logging={LogCfg.log_level}" ]
     else:
-        cmdline = f"./freemqttd --daemon --log-file-prefix={LogCfg.path} --log-file-max-size={LogCfg.maxim_size} --logging={LogCfg.log_level}"
-        
-    p = subprocess.Popen(cmdline, close_fds=False, creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
+       # cmdline = f"./freemqttd --daemon --log-file-prefix={LogCfg.path} --log-file-max-size={LogCfg.maxim_size} --logging={LogCfg.log_level}"
+        command = [ "./freemqttd", "--daemon", f"--log-file-prefix={LogCfg.path}", f"--log-file-max-size={LogCfg.maxim_size}", f"--logging={LogCfg.log_level}" ]
+    p = subprocess.Popen(command, close_fds=False, startupinfo=si, creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
     start_time = int(time.time())
     return p
 

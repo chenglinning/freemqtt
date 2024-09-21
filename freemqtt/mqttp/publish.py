@@ -40,6 +40,9 @@ class Publish(Packet):
 
     def set_topic(self, val: str) -> None:
         self.topic = val
+        
+    def set_payload(self, val: bytes) -> None:
+        self.payload = val
 
     # unpack connack packet on client side
     def unpack(self, r: io.BytesIO) -> bool:

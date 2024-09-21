@@ -6,10 +6,12 @@ from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 from base64 import b64encode, b64decode
 from Crypto.Util.Padding import unpad, pad
+from .config import CommonCfg
 
-HEX_KEY = 'f593bde387f7530cf0f35cc2db763f75'
-HEX_IV = '5ab770e779c0fd0c3ab018e7439e2a3d'
-
+#HEX_KEY = 'f593bde387f7530cf0f35cc2db763f75'
+#HEX_IV = '5ab770e779c0fd0c3ab018e7439e2a3d'
+HEX_KEY = CommonCfg.secret[:32]
+HEX_IV = CommonCfg.secret[-32:]
 def signToken(appid:str, /) -> str:
     nonce = get_random_bytes(4).hex()
     data0 = appid+nonce

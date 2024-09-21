@@ -1,14 +1,14 @@
 import argparse
 import uuid
 from freemqtt.server.tokentools import signToken, verifyToken
-appid = uuid.uuid1().hex[0:8]
-#appname = 'demo'
+# appid = uuid.uuid1().hex[0:8]
+# appname = 'demo'
 appname = '家悦'
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("appname", help="freemqtt application name")
+    parser.add_argument("appid", help="freemqtt appid")
     args = parser.parse_args()
-    app = args.appname
+    app = args.appid
     token = signToken(app)
     data = verifyToken(token)
     print (f"\nAppID: {data}")
