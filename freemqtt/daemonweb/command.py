@@ -26,18 +26,16 @@ def start_freemqtt_broker():
         si = subprocess.STARTUPINFO()
         si.dwFlags = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
         dwflags = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
-    print("dwflags: ", dwflags)
-    
+        
     global freemqttd_p, status, start_time
     LogCfg = load_toml_config("./config.toml").log
     if "freemqttm.py" in sys.argv[0]:
-       #cmdline = f"python ./freemqttd.py --daemon --log-file-prefix={LogCfg.path} --log-file-max-size={LogCfg.maxim_size} --logging={LogCfg.log_level}"
         command = [ "python", "./freemqttd.py", "--daemon", f"--log-file-prefix={LogCfg.path}", f"--log-file-max-size={LogCfg.maxim_size}", f"--logging={LogCfg.log_level}" ]
     else:
-       # cmdline = f"./freemqttd --daemon --log-file-prefix={LogCfg.path} --log-file-max-size={LogCfg.maxim_size} --logging={LogCfg.log_level}"
         command = [ "./freemqttd", "--daemon", f"--log-file-prefix={LogCfg.path}", f"--log-file-max-size={LogCfg.maxim_size}", f"--logging={LogCfg.log_level}" ]
     p = subprocess.Popen(command, close_fds=False, startupinfo=si, creationflags=dwflags)
     start_time = int(time.time())
+    time.sleep(3)
     return p
 
 # freemqtt RUNNING   pid 381527, uptime 91 days, 16:45:27
