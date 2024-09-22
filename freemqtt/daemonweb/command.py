@@ -80,7 +80,7 @@ class CommandHandler(BaseHandler):
             elif status==State.running:
                 self.set_error_code(6002)
             else:
-                self.send_error(1)
+#               self.send_error(1)
                 self.set_error_string("start freemqttd fail.")
         elif cmd=="stop":
             if status==State.running:
