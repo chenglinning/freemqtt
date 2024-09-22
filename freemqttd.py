@@ -49,7 +49,7 @@ tcp_server = None
 ssl_server = None
 ws_server = None
 wss_server = None
-freemqttd_stop_event = asyncio.Event()
+
 def sig_handler(signum, frame):
     signame = signal.Signals(signum).name
     logging.info(f'FreeMQTT broker received signal: {signame}({signum})')
@@ -61,8 +61,7 @@ def sig_handler(signum, frame):
         ssl_server.stop()
     if wss_server:
         wss_server.stop()
-  # sys.exit(1)
-    freemqttd_stop_event.set()
+    sys.exit(1)
 
 # KeyboardInterrupt
 signal.signal(signal.SIGINT, sig_handler)
@@ -126,8 +125,7 @@ async def main():
         ssl_ctx.load_cert_chain(mqttcfg.wss.ssl_certificate, mqttcfg.wss.ssl_certificate_key)
         wss_server = tornado.httpserver.HTTPServer(app, xheaders=True, ssl_options=ssl_ctx)
         wss_server.listen(mqttcfg.wss.port, address=mqttcfg.wss.address)
-  # await asyncio.Event().wait()
-    await freemqttd_stop_event.wait()
+    await asyncio.Event().wait()
     logging.info("freemqttd stoped")
     
 if __name__ == "__main__":
