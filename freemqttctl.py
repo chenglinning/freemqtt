@@ -23,6 +23,7 @@ if __name__ == "__main__":
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     result = sock.connect_ex((MonitorCfg.address, MonitorCfg.port))
     
+    si = None
     if os.name == "nt":
         si = subprocess.STARTUPINFO()
         si.dwFlags = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
@@ -33,11 +34,10 @@ if __name__ == "__main__":
         print ("starting freemqttd ...")
         if "freemqttctl.py" in sys.argv[0]:
             command = ["python", "./freemqttm.py"]
-            p = subprocess.Popen(command, close_fds=True, startupinfo=si)
-#           p = subprocess.Popen("python ./freemqttm.py", close_fds=True, creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
+            p = subprocess.Popen(command, close_fds=True, startupinfo=si, creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
         else:
             command = ["./freemqttm"]
-            p = subprocess.Popen(command, close_fds=True, creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
+            p = subprocess.Popen(command, close_fds=True, startupinfo=si, creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
 #           p = subprocess.Popen("./freemqttm", close_fds=True, creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
         time.sleep(5)
     session = requests.Session()
