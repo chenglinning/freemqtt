@@ -20,20 +20,20 @@ Python 3.9+
 
 ### Getting started
 
-+ Get source code
+1. Get source code
 
 ```bash
 $ git clone git@github.com:ningchenglin/freemqtt.git
 ```
 
-+ Install dependency packages
+2. Install dependency packages
 
 ```bash
 $ cd ./freemqtt
 $ python -m pip install -r requirements.txt
 ```
 
-+ Run the server in the foreground
+3. Run the server in foreground
 
 ```bash
 $ python ./freemqttd.py
@@ -41,7 +41,7 @@ $ python ./freemqttd.py
 
 ```
 
-+ Run the server in the background
+4. Run the server in background
 
 ```bash
 $ python ./freemqttctl.py start
@@ -50,7 +50,7 @@ start freemqttd success.
 
 ```
 
-+ Generate MQTT client login password (Token)
+5. Generate MQTT client login password (Token)
 
 ```bash
 $ python ./freemqtt_token.py myapp
