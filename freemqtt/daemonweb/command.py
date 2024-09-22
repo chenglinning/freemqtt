@@ -20,13 +20,14 @@ stop_time = int(time.time())
 freemqttd_p = None
 
 def start_freemqtt_broker():
-    dwflags = 0
     si = None
+    dwflags = 0
     if os.name == "nt":
         si = subprocess.STARTUPINFO()
         si.dwFlags = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
         dwflags = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
-        
+    print("dwflags: ", dwflags)
+    
     global freemqttd_p, status, start_time
     LogCfg = load_toml_config("./config.toml").log
     if "freemqttm.py" in sys.argv[0]:
