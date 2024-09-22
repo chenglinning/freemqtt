@@ -23,7 +23,7 @@ if __name__ == "__main__":
     result = sock.connect_ex((MonitorCfg.address, MonitorCfg.port))
     
     si = None
-    dwflags = subprocess.CREATE_NEW_PROCESS_GROUP
+    dwflags = 0
     if os.name == "nt":
         si = subprocess.STARTUPINFO()
         si.dwFlags = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
