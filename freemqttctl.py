@@ -16,7 +16,6 @@ jwtoken = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhcGlrZXkiOiI5NzY2Y2MxMzFmZTg3
 url = f"http://{MonitorCfg.address}:{MonitorCfg.port}/cmd"
 
 if __name__ == "__main__":
-#   print( subprocess._USE_POSIX_SPAWN, subprocess._USE_VFORK)
     parser = argparse.ArgumentParser()
     parser.add_argument("command", help="start | stop | status | restart", choices=["start", "stop", "status", "restart"])
     args = parser.parse_args()
@@ -24,7 +23,7 @@ if __name__ == "__main__":
     result = sock.connect_ex((MonitorCfg.address, MonitorCfg.port))
     
     si = None
-    dwflags = subprocess.DETACHED_PROCESS
+    dwflags = subprocess.CREATE_NEW_PROCESS_GROUP
     if os.name == "nt":
         si = subprocess.STARTUPINFO()
         si.dwFlags = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
@@ -40,7 +39,6 @@ if __name__ == "__main__":
         else:
             command = ["./freemqttm"]
             p = subprocess.Popen(command, close_fds=True, startupinfo=si, creationflags=dwflags)
-#           p = subprocess.Popen("./freemqttm", close_fds=True, creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
         time.sleep(5)
     session = requests.Session()
     headers = {}
