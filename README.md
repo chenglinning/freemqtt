@@ -23,7 +23,7 @@ Python 3.9+
 + Get source code
 
 ```bash
-$ git clone git@github.com:chenglinning/freemqtt.git
+$ git clone https://github.com/chenglinning/freemqtt.git
 ```
 + Install dependency packages
 
