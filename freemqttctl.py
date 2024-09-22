@@ -48,4 +48,7 @@ if __name__ == "__main__":
     response = session.post(url, headers=headers, data=json.dumps({"cmd": args.command}), timeout=8, proxies=None, verify=False)
     if response.status_code == 200:
         result = response.json()
-    print (result["error_string"], "\n")
+        print (result["error_string"], "\n")
+    else:
+        print (f"response.status_code: {response.status_code}", "\n")
+        
