@@ -1,12 +1,42 @@
 ## FreeMQTTT
-A MQTT Server in Python
-### Feature
-::: FreeMQTT's unique application isolation security mechanism
 
-+ FreeMQTT assigns each incoming MQTT client to a separate independent Application
-+ FreeMQTT generates a token Token for each Application using the freemqtt_token command (multiple tokens can be generated)
-+ The token Token contains the Application ID and is encrypted and signed with the secret key
-+ MQTT clients connecting to FreeMQTT pass the token Token as the password in the connect method
-+ FreeMQTT verifies the authentication by decrypting and verifying the signature when receiving the CONNECT message
-+ If FreeMQTT authenticates successfully, it will obtain the Application ID of the MQTT client from the token Token
-+ Different Applications are independent of each other, and Application A can have an A client, while Application B can have a B client.
+MQTT broker implemented in python
+
+### Features
+
++ Implements the full set of MQTT 3.1.1 & MQTT 5.0 (except AUTH) protocol specifications
++ Support QoS 0, QoS 1 and QoS 2 messages flow
++ TCP and websocket support
++ SSL support over TCP and websocket
++ Unique application isolation security mechanism
++ Sytem metrics topic: $SYS/METRICS
++ Client online notify topic:  $SYS/ONLINE
++ Client offline notify topic: $SYS/OFFLINE
++ Configuration using the TOML file
+
+### Running environment
+
+Python 3.9+
+
+### Getting started
+
++ Get source code
+  
+```bash
+$ git clone git@github.com:ningchenglin/freemqtt.git
+```
+
++ Install dependency packages
+  
+```bash
+$ cd ./freemqtt
+$ python -m pip install -r requirements.txt
+```
++ Runing FreeMQTT
+
+```bash
+$ python ./freemqttd.py
+[I 240921 16:54:11 freemqttd:91] freemqttd started
+
+```
+  
