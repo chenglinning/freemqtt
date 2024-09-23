@@ -1,18 +1,18 @@
-## [FreeMQTTT]((https://freemqtt.cn)
+## FreeMQTTT
 
 MQTT broker implemented in python based on asyncio (async/await)
 
 ### Features
 
 + Implements the full set of MQTT 3.1.1 & MQTT 5.0 (except AUTH)
-+ Support QoS 0, QoS 1 and QoS 2 messages flow
++ QoS0, QoS1, QoS2 support
 + MQTT over Websocket support
 + TLS/SSL support
 + Unique Application isolation security mechanism
 + Sytem metrics topic: $SYS/METRICS
 + Client online notify topic:  $SYS/ONLINE
 + Client offline notify topic: $SYS/OFFLINE
-+ Configuration using the TOML file
++ Configuration using the toml file
 
 ### Running environment
 
