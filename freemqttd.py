@@ -137,3 +137,4 @@ if __name__ == "__main__":
 #  sudo docker run -itd -p 1883:1883 -w /freemqttd --name tencent-freemqtt tencent-freemqt-img /freemqttd/freemqttd
 #  sudo docker run -itd -p 1883:1883 --name freemqttd freemqtt-img
 #  tar -zxvf freemqtt-docker-img.tar.gz
+#  docker load -i freemqtt-img.tar

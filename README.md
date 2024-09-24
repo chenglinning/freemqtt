@@ -10,9 +10,9 @@ MQTT broker implemented in python based on asyncio (async/await)
 + TLS/SSL support
 + Unique Application isolation security mechanism
 + Sytem metrics topic: $SYS/METRICS
-+ Client online notify topic:  $SYS/ONLINE
-+ Client offline notify topic: $SYS/OFFLINE
-+ Configuration using the toml file
++ Client online notification topic:  $SYS/ONLINE
++ Client offline notification topic: $SYS/OFFLINE
++ Configuration using the TOML file
 
 ### Running environment
 
