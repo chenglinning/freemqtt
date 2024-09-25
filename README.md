@@ -58,4 +58,4 @@ AppID: myapp
 Token: gVRVsBqw3bQSD4CQ4rFOXtfGQMelHJmEaNlYtH7GS/A=
 ```
 
-Documentation is available on [Read the Docs](https://freemqtt.cn/pages/freemqtt-intro.html).
+Documentation is available on [Read the Docs](https://freemqtt.cn)
