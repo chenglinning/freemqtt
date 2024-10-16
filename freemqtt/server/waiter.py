@@ -172,6 +172,7 @@ class Waiter(object):
         # unpack remaining data
         packet = PacketClass.get(pktype)(ver=self.protocol_version)
         packet.set_flags(flags)
+        packet.set_remain_len(remain_len)
         reader = BytesIO(data)
         if not packet.unpack(reader):
             packet = None
@@ -517,7 +518,8 @@ class Waiter(object):
                 top.valid = True
                 self.app.addSubscription(tf, top, self.connect.clientid)
             else:
-                rcodes.append(Reason.InvalidTopicFilter)
+                rc = Reason.InvalidTopicFilter if self.connect.get_version()==protocol.MQTT50 else Reason.UnspecifiedError
+                rcodes.append(rc)
                 top.valid = False
             logging.info(f"  item-{no:02d}: tf:{tf} qos:{top.QoS()} option:0x{top.options:02X} valid:{top.valid}")
         pid = packet.get_pid()
@@ -525,16 +527,21 @@ class Waiter(object):
         await self.app.dispatchRetainMessages(packet, clientid)
 
     async def unsubscribe_handler(self, packet: Unsubscribe) -> Awaitable[None]:
+        logging.info(f"R UNSUBSCRIBE (m{packet.pid} v{packet.get_version()}) app/cid:{self.appid}/{self.connect.clientid}")
         rcodes = list()
+        no = 0
         for tf in packet.topic_filter_list:
+            no += 1
             if self.verifyTopicFilter(tf):
                 rcodes.append(Reason.Success)
                 self.app.delSubscription(tf, self.connect.clientid)
             else:
-                rcodes.append(Reason.InvalidTopicFilter)
+                rc = Reason.InvalidTopicFilter if self.connect.get_version()==protocol.MQTT50 else Reason.UnspecifiedError
+                rcodes.append(rc)
+            logging.info(f"  item-{no:02d}: tf:{tf}")
+                
         pid = packet.get_pid()
         clientid = self.connect.clientid
-        logging.info(f"R UNSUBSCRIBE (m{pid} v{packet.get_version()}) app/cid:{self.appid}/{self.connect.clientid}")
         await self.unsuback(pid, rcodes)
 
     async def pingresp(self) -> Awaitable[None]:
@@ -605,7 +612,8 @@ class Waiter(object):
         elif self.state==State.INITIATED:
             return 
         logging.debug(f'state: {self.state.name}')
-        if self.state==State.KICKOUT or self.state==State.DISCONNECTED_BY_CLIENT:
+#       if self.state==State.KICKOUT or self.state==State.DISCONNECTED_BY_CLIENT:
+        if self.state==State.KICKOUT:
             self.app.delSession(self.connect.clientid)
         elif self.state==State.CLOSED:
             if self.connect.get_version()==protocol.MQTT311:

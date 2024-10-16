@@ -13,6 +13,7 @@ class AuthPlugin(object):
 
     def auth_token(self, token:str=None) -> str:
         logging.info(f'Token: {token}')
+#       return "paho-test"
         try:
             appid = verifyToken(token)
         except Exception as e:

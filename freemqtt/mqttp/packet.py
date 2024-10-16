@@ -16,9 +16,10 @@ class Packet(object):
         self.pktype = pktype
         self.pid = 0
         self.dup = False
-        self.qos = QoS.qos0
+        self.qos = QoS.qos1 if pktype in {PacketType.PUBREL, PacketType.SUBSCRIBE, PacketType.UNSUBSCRIBE} else QoS.qos0
         self.retain = False
-
+        self.remain_len = 0
+        
     # get packet type
     def get_type(self) -> PacketType:
         return self.pktype
@@ -85,6 +86,14 @@ class Packet(object):
     
     def pack(self) -> bytes:
         pass
+    
+    #  Get the packet's remain length
+    def get_remain_len(self) -> int:
+        return self.remain_len
+    
+    #  Set the packet's remain length
+    def set_remain_len(self, remain_len: int) -> None:
+        self.remain_len = remain_len
     
     # Get entire pack of packet
     def full_pack(self) -> bytes:

@@ -72,14 +72,9 @@ class Publish(Packet):
             if not self.propset.unpack(r):
                 logging.error("Error parse properties")
                 return False
-
         # payload
-        payload = utils.read_rest_data(r)
-        if not payload:
-            logging.error("Error parse paylaod")
-            return False
-        self.payload = payload
-
+        self.payload = utils.read_rest_data(r)
+        
         # expire at
         if self.version == protocol.MQTT50:
             self.expire_at = time.time() + self.expired_interval()

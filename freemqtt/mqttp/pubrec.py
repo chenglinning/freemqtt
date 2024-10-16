@@ -33,6 +33,9 @@ class Pubrec(Packet):
             logging.error("Error pubrec packet id: None")
             return False
         self.set_pid(pid)
+        
+        if self.get_remain_len()==2: # no more data for this packet
+            return True
 
         if self.version == protocol.MQTT50 :
             # reason code
