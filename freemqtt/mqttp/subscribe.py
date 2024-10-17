@@ -30,7 +30,7 @@ class TopicOptPair(object):
         return self.options & mask.SubscriptionRAP != 0
 
     def RH(self) -> int:
-        return self.options & mask.SubscriptionRetainHandling >> 4
+        return (self.options & mask.SubscriptionRetainHandling) >> 4
 
     def setQoS(self, qos: int) -> None:
         self.options =  (self.options & ~mask.SubscriptionQoS) | qos

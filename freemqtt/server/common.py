@@ -4,6 +4,7 @@
 #       http://www.apache.org/licenses/LICENSE-2.0
 #
 import re
+import logging
 from typing import NewType
 from enum import IntEnum
 
@@ -92,7 +93,8 @@ class SubOption(object):
         return self.options & mask.SubscriptionRAP != 0
 
     def RH(self) -> int:
-        return self.options & mask.SubscriptionRetainHandling >> 4
+        logging.debug(f"options: {self.options}")
+        return (self.options & mask.SubscriptionRetainHandling) >> 4
 
     def setQoS(self, qos: int) -> None:
         self.options =  (self.options & ~mask.SubscriptionQoS) | qos

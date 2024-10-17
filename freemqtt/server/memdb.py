@@ -201,17 +201,22 @@ class MqttApp(object):
 
     async def dispatchRetainMessages(self, packet:Subscribe, clientid:ClientID) -> None:
         session = self.getSession(clientid)
+        logging.debug(f"enter dispachetRetainMessages...")
         if not session:
+            logging.debug(f"no session")
             return
         for top in packet.topicOpsList:
             if top.shared or top.RH()==2 or not top.valid:
+                logging.debug(f"shared:{top.shared } RH:{top.RH()} vaild:{top.valid}")
                 continue
             if top.existing and top.RH()==1:
+                logging.debug(f"existing:{top.existing} RH:{top.RH()}")
                 continue
             suboption = SubOption(options=top.options, subid=top.sub_id)
             tpset0 = self.tf_retain_topics.get(top.topic_filter, set())
             tpset = copy(tpset0)
             for topic in tpset:
+                logging.debug(f"topic: {topic}")
                 message = self.retain_msg.get(topic, None)
                 if message:
                     if  time.time() < message.expire_at:
