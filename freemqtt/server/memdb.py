@@ -52,6 +52,8 @@ class MqttApp(object):
 
     def addSubscription(self, tf: TopicFilter, top: TopicOptPair, clientid: ClientID) -> None:
         subopt = SubOption(options=top.options, subid=top.sub_id)
+        session = self.getSession(clientid)
+        session.add_topic_filter(tf)
         if SharedTopicRegexp.match(tf):
             top.shared = True
             # share topic filter
@@ -73,6 +75,8 @@ class MqttApp(object):
             self.subdb[tf] = csubopts
 
     def delSubscription(self, tf: TopicFilter, clientid: ClientID) -> None:
+        session = self.getSession(clientid)
+      # session.remove_topic_filter(tf)
         if SharedTopicRegexp.match(tf):
             # share topic filter
             tflist = tf.split('/')
@@ -139,17 +143,16 @@ class MqttApp(object):
         oldsession = self.ssdb.pop(clientid, None)
         if oldsession:
             for tf in oldsession.topicFilterSet:
-                self.subdb[tf].pop(clientid, None)
+                self.delSubscription(tf, clientid)
             oldsession.topicFilterSet.clear()
             del oldsession
-            
         self.ssdb[clientid] = MQTTSession(waiter)
 
     def delSession(self, clientid: ClientID) -> None:
         session = self.ssdb.pop(clientid, None)
         if session:
             for tf in session.topicFilterSet:
-                self.subdb[tf].pop(clientid, None)
+                self.delSubscription(tf, clientid)
             session.topicFilterSet.clear()
             del session
 
@@ -188,6 +191,7 @@ class MqttApp(object):
             for clientid, suboption in subs.items():
                 session = self.getSession(clientid)
                 if session:
+                    logging.info(f'dispatch: {tf} Clientid({clientid})')
                     IOLoop.current().spawn_callback(session.delivery, packet, suboption, False)
 
         # for shared subscriptions
@@ -196,14 +200,12 @@ class MqttApp(object):
             for sharename, (clientid, suboption) in sc2subs.items():
                 session = self.getSession(clientid)
                 if session:
-                    logging.info(f'$Share/{sharename}/{tf} Clientid({clientid})')
+                    logging.info(f'dispatch: $Share/{sharename}/{tf} Clientid({clientid})')
                     IOLoop.current().spawn_callback(session.delivery, packet, suboption, True)
 
     async def dispatchRetainMessages(self, packet:Subscribe, clientid:ClientID) -> None:
         session = self.getSession(clientid)
-        logging.debug(f"enter dispachetRetainMessages...")
         if not session:
-            logging.debug(f"no session")
             return
         for top in packet.topicOpsList:
             if top.shared or top.RH()==2 or not top.valid:

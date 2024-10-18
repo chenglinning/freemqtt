@@ -131,12 +131,14 @@ class Connect(Packet):
 
     	# MQTT3.1.1 5.0  reading client id
         self.clientid = utils.read_string(r)
+        logging.debug(f"unpack clientid: {self.clientid}")
         if not self.clientid:
             if not self.clean_start:
                 return False
             self.clientid = uuid.uuid1().hex[0:8]
             self.assigned_id = True
-        
+            logging.debug(f"assigned_id: {self.assigned_id} clientid: {self.clientid}")
+
         # Parsing will data
         if self.will:
             # will properties

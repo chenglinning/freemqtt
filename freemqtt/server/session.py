@@ -114,11 +114,13 @@ class MQTTSession(object):
                 return False
         now = time.time()
         if now > packet.expire_at:
-            logging.info(f'Expired topic {packet.topic} (q{packet.get_qos()} r{int(packet.get_retain())}) to {self.waiter.connect.clientid}')
+            logging.debug(f'Expired topic {packet.topic} (q{packet.get_qos()} r{int(packet.get_retain())}) to {self.waiter.connect.clientid}')
             return False
         packet.set_expired_interval(int(packet.expire_at - now))
         packet2 = copy.deepcopy(packet)
         packet2.set_version(self.waiter.protocol_version)
+        
+        logging.debug(f"suboption.RAP:{suboption.RAP()} {suboption.options}")
         if not suboption.RAP():
             packet2.set_retain(False)
         packet2.sharing = sharing
@@ -161,7 +163,6 @@ class MQTTSession(object):
             logging.error(f"{Reason.PacketTooLarge.name}. Packet size: {psize} > {maxpsize}. app/cid:{self.waiter.appid}/{clientid}")
             return False
 #       self.add_outgoing_inflight_message(packet3)
-
         if self.waiter.state==State.CONNECTED:
             self.add_outgoing_inflight_message(packet3)
             if self.waiter.send_quota:

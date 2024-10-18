@@ -287,6 +287,7 @@ class Waiter(object):
             # Maximum Packet Size
             packet.set_maximum_packet_size(Config.maximum_packet_size)
             # Assigned Client Identifier
+            logging.debug(f"assigned_id: {self.connect.assigned_id} clientid: {self.connect.clientid}")
             if self.connect.assigned_id:
                 packet.set_assiged_client_identifier(self.connect.clientid)
             # Topic Alias Maximum
