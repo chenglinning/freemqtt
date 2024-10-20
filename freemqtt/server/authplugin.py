@@ -13,7 +13,7 @@ class AuthPlugin(object):
 
     def auth_token(self, token:str=None) -> str:
         logging.info(f'Token: {token}')
-#       return "gmqttest"
+    #   return "gtest"
         try:
             appid = verifyToken(token)
         except Exception as e:
