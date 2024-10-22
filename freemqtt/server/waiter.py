@@ -189,12 +189,11 @@ class Waiter(object):
                 if packet:
                   # logging.info(f'packet version: {packet.version}')
                     await self.handle_packet(packet)
+                elif self.state==State.INITIATED:
+                    await self.connack(0x00, Reason.MalformedPacket)
+                    self.transport.close()
                 else:
-                   #if self.state == State.CONNECTED and self.protocol_version==protocol.MQTT50:
-                    if self.state == State.CONNECTED:
-                        await self.disconnect(Reason.MalformedPacket)
-                    else:
-                        self.transport.close()
+                    await self.disconnect(Reason.MalformedPacket)
             except TransportClosedError:
                 logging.error(f"remote: {self.remote_ip} be closed")
                 if self.state == State.CONNECTED:
@@ -317,10 +316,16 @@ class Waiter(object):
         
         data = packet.full_pack()
         await self.transport.write(data)
-        logging.info(f"S CONNACK app/cid:{self.appid}/{self.connect.clientid}")
+        if self.connect:
+            logging.info(f"S CONNACK Reason: {rcode.name} app/cid:{self.appid}/{self.connect.clientid}")
+        else:
+            logging.warning(f"S CONNACK Reason: {rcode.name}")
+            
         if rcode==Reason.Success:
             await self.notify_status(status=ONLINE, reason="connect")     
-            
+        else:
+            await self.transport.write(data)
+           
     async def disconnect(self, rcode: Reason) -> Awaitable[None]:
         packet = Disconnect(self.protocol_version)
         if self.protocol_version == protocol.MQTT50:
@@ -331,7 +336,7 @@ class Waiter(object):
         self.state = State.DISCONNECTED_BY_SERVER
         self.transport.close()
         await self.notify_status(status=OFFLINE, reason=rcode.name)            
-        logging.info(f"S DISCONNECT app/cid:{self.appid}/{self.connect.clientid}")
+        logging.info(f"S DISCONNECT Reason: {rcode.name} app/cid:{self.appid}/{self.connect.clientid}")
 
     async def publish_handler(self, packet: Publish) -> Awaitable[None]:
         qos = packet.get_qos()
@@ -566,7 +571,7 @@ class Waiter(object):
             logging.error(f"Connection be closed. reason: ProtocolError. app/cid:{self.appid}/{self.connect.clientid}")
             return
         
-        logging.info(f"R DISCONNECT app/cid:{self.appid}/{self.connect.clientid}")
+        logging.info(f"R DISCONNECT Reason: {packet.rcode.name} app/cid:{self.appid}/{self.connect.clientid}")
         session = self.app.getSession(self.connect.clientid)
         if session:
             session.sei = sei

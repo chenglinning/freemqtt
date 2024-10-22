@@ -132,6 +132,9 @@ class Connect(Packet):
     	# MQTT3.1.1 5.0  reading client id
         self.clientid = utils.read_string(r)
         logging.debug(f"unpack clientid: {self.clientid}")
+        if self.clientid is None:
+            return False
+        
         if not self.clientid:
             if not self.clean_start:
                 return False
