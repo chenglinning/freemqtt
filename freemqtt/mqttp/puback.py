@@ -38,7 +38,7 @@ class Puback(Packet):
         if self.get_remain_len()==2: # no more data for this packet
             return True
 
-        if self.version == protocol.MQTT50 :
+        if self.version == protocol.MQTT50:
             # reason code
             rcode = utils.read_int8(r)
             if rcode is None:
