@@ -6,8 +6,8 @@
     # 必须为64位十六进制字符串（二进制256位秘钥）
     # 一定要注意保管，避免向外泄漏
     secret = "F593BDE387F7530CF0F35CC2DB763F755AB770E779C0FD0C3AB018E7439E2A3D"
-    # 最大topic & topic filter 级别，默认4
-    maximum_topic_level = 6
+    # 最大topic & topic filter 级别，默认 8
+    maximum_topic_level = 8
 
     # 发布 FreeMQTT 统计信息间隔
     pub_sys_stat_interval = 300 # in seconds    

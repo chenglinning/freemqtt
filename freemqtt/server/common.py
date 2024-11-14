@@ -35,9 +35,21 @@ ClientID = NewType("ClientID", str)
 AppID = NewType("AppID", str)
 ShareName = NewType("ShareName", str)
 NodeID = NewType("NodeID", str)
+"""
+// TopicFilterRegexp regular expression that all subscriptions must be validated
+TopicFilterRegexp = regexp.MustCompile(`^(([^+#]*|\+)(/([^+#]*|\+))*(/#)?|#)$`)
 
-TopicFilterRegexp = re.compile(r'^[^/](([^+#]*|\+)(/([^+#]*|\+))*(/#)?|#)$')
-TopicPublishRegexp = re.compile(r'^[^/$][^#+]*$')
+// TopicPublishRegexp regular expression that all publish to topic must be validated
+TopicPublishRegexp = regexp.MustCompile(`^[^#+]*$`)
+
+"""
+
+# TopicFilterRegexp = re.compile(r'^[^/](([^+#]*|\+)(/([^+#]*|\+))*(/#)?|#)$')
+# TopicPublishRegexp = re.compile(r'^[^/$][^#+]*$')
+
+TopicFilterRegexp = re.compile(r'^(([^+#]*|\+)(/([^+#]*|\+))*(/#)?|#)$')
+TopicPublishRegexp = re.compile(r'[^#+]*$')
+
 SharedTopicRegexp = re.compile(r'^\$share/([^#+/]+)(/)(.+)$')
 BasicUTFRegexp = re.compile(r'^[^\u0000-\u001F\u007F-\u009F]*$')
 FACTOR = 1.382
